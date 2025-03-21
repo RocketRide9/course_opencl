@@ -37,6 +37,23 @@ public class RectMesh
         IYw = Enumerable.Range(0, Y.Count).ToList();
     }
 
+    public void RefineDiv2()
+    {
+        var rparams = RefineParams.Value;
+        for (int i = 0; i < rparams.XSplitCount.Length; i++)
+        {
+            rparams.XSplitCount[i] *= 2;
+            rparams.XStretchRatio[i] = (Real)Math.Sqrt(rparams.XStretchRatio[i]);
+        }
+        for (int i = 0; i < rparams.YSplitCount.Length; i++)
+        {
+            rparams.YSplitCount[i] *= 2;
+            rparams.YStretchRatio[i] = (Real)Math.Sqrt(rparams.YStretchRatio[i]);
+        }
+
+        Refine(rparams);
+    }
+
     static Real FirstStepSize(Real stretch, int seg_count, Real gap)
     {
         Real sum;

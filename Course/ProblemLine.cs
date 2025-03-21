@@ -7,7 +7,7 @@ class ProblemLine {
     RefineParams refineParams;
     ComputationalDomain computationalDomain;
     BoundaryCondition[] boundaryConditions;
-    FEMSlae femSlae;
+    public FEMSlae femSlae;
     
     int[] XMonitor = [];
     int[] YMonitor = [];
@@ -81,7 +81,7 @@ class ProblemLine {
     
     public void SolveMCG ()
     {
-        var x0 = new SparkCL.Memory<float>(Enumerable.Repeat(0f, femSlae.Slae.B.Count).ToArray());
+        var x0 = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
         var slae = femSlae.Slae;
         var solver = new BicgStab(
             slae.Mat,
@@ -90,7 +90,8 @@ class ProblemLine {
             slae.Ia,
             slae.Ja,
             x0,
-            problemParams.maxIter
+            problemParams.maxIter,
+            problemParams.eps
         );
         var info = solver.Solve();
         solver.X.Read();
@@ -112,8 +113,8 @@ class ProblemLine {
                 i++;
             }
         }
-        Console.WriteLine($"Max error: {max_err}");
-        Console.WriteLine($"Info: {info}");
+        //Console.WriteLine($"Max error: {max_err}");
+        //Console.WriteLine($"Info: {info}");
         Console.WriteLine($"Lebeg2 error: {Lebeg2Err(solver.X)}");
     }
 

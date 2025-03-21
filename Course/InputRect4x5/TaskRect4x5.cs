@@ -26,7 +26,7 @@ class TaskRect4x5 : TaskFuncs
     {
         return subdom switch
         {
-            0 => (Real)(2*Math.Exp(x+y) + 3*x),
+            0 => (Real)((y*y-1)*Math.Exp(x+y) + x*y*y),
             _ => throw new ArgumentException("Неверный номер граничного условия"),
         };
     }
@@ -53,7 +53,7 @@ class TaskRect4x5 : TaskFuncs
     {
         return bcNum switch
         {
-            0 => (Real)(Math.Exp(4+y) + 4)/2,
+            0 => (Real)(Math.Exp(4+y) + 1)/2,
             1 => -(Real)(Math.Exp(1+y) + 1)/2,
             _ => throw new ArgumentException("Некорректный номер условия"),
         };

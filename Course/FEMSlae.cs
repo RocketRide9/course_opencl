@@ -52,7 +52,16 @@ class FEMSlae
         GlobalMatrixBuild();
         BoundaryConditionsApply();
     }
-    
+
+    public void MeshDouble()
+    {
+        Mesh.RefineDiv2();
+
+        GlobalMatrixInit();
+        GlobalMatrixBuild();
+        BoundaryConditionsApply();
+    }
+
     void GlobalMatrixInit()
     {
         GlobalMatrixPortraitCompose();
@@ -572,29 +581,29 @@ class FEMSlae
             }
         }
     }
-    
+
     void GlobalMatrixBuild ()
     {
         Real GetGammaAverage (int dom, int x0, int y0)
         {
-            Real res = _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0])     
+            Real res = _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0])
                        + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
                        + _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
                        + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
-    
+
             return res / 4;
         }
-    
+
         Real GetLamdaAverage (int dom, int x0, int y0)
         {
-            Real res = _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0])     
+            Real res = _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0])
                        + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
                        + _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
                        + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
-    
+
             return res / 4;
         }
-        
+
         for (int yi = 0; yi < _mesh.Y.Count - 1; yi++)
         {
             for (int xi = 0; xi < _mesh.X.Count - 1; xi++)
@@ -606,34 +615,27 @@ class FEMSlae
                 m[1] = m[0] + 1;
                 m[2] = (yi + 1) * _mesh.X.Count + xi;
                 m[3] = m[2] + 1;
-                
+
                 if (subDom == null) continue;
 
                 Real x0 = _mesh.X[xi];
                 Real x1 = _mesh.X[xi + 1];
                 Real y0 = _mesh.Y[yi];
                 Real y1 = _mesh.Y[yi + 1];
-                
+
                 Real hy = y1 - y0;
                 Real hx = x1 - x0;
                 // Заменить на интеграл от биквадратичного разложения
                 Real l_avg = GetLamdaAverage(subDom.Value, xi, yi);
                 Real g_avg = GetGammaAverage(subDom.Value, xi, yi);
-                var localG = LocalGMatrix(hx, hy, l_avg);
-                var localM = LocalMMatrix(hx, hy, g_avg);
                 var localB = LocalBVector(subDom.Value, x0, x1, y0, y1);
 
                 /* нахождение в ja индексов элементов в al/au, куда
                     нужно добавить элементы локальных матриц */
                 for (int i = 0; i < 4; i++)
                 {
-                    var v1 = localG[i, i] + localM[i, i];
                     var v2 = l_avg/6 * (hy/hx * _localG1[i, i] + hx/hy * _localG2[i, i])
                         + g_avg/36 * hx*hy * _localM[i, i];
-                    if (Math.Abs(v1 - v2) > 1e-5)
-                    {
-                        throw new Exception($"oh {Math.Abs(v1 - v2)}");
-                    }
                     Slae.Di[m[i]] += v2;
 
                     int beg = Slae.Ia[m[i]];
@@ -663,18 +665,13 @@ class FEMSlae
                             throw new Exception("Quick search failed");
                         }
 
-                        v1 = localG[i, j] + localM[i, j];
                         v2 = l_avg/6 * (hy/hx * _localG1[i, j] + hx/hy * _localG2[i, j])
                             + g_avg/36 * hx*hy * _localM[i, j];
-                        if (Math.Abs(v1 - v2) > 1e-5)
-                        {
-                            throw new Exception($"oh {Math.Abs(v1 - v2)}");
-                        }
                         Slae.Mat[beg] += v2;
                         beg++;
                     }
                 }
-                
+
                 /* добавление локальной правой части в слау */
                 for (int i = 0; i < 4; i++)
                 {
@@ -693,58 +690,6 @@ class FEMSlae
             }
         }
     }
-
-    static Real[,] LocalGMatrix(Real hx, Real hy, Real lambda)
-    {
-        Real[,] G = new Real[4, 4];
-        
-        Real GElem (Real k1, Real k2)
-        {
-            return lambda * (hy / hx / k1 + hx / hy / k2);
-        }
-                  G[0, 0] = GElem ( 3,  3);
-        G[1, 0] = G[0, 1] = GElem (-3,  6);
-        G[2, 0] = G[0, 2] = GElem ( 6, -3);
-        G[3, 0] = G[0, 3] = GElem (-6, -6);
-        
-                  G[1, 1] = GElem ( 3,  3);
-        G[2, 1] = G[1, 2] = GElem (-6, -6);
-        G[3, 1] = G[1, 3] = GElem ( 6, -3);
-        
-                  G[2, 2] = GElem ( 3,  3);
-        G[3, 2] = G[2, 3] = GElem (-3,  6);
-    
-                  G[3, 3] = GElem ( 3,  3);
-        
-        return G;
-    }
-
-    static Real[,] LocalMMatrix(Real hx, Real hy, Real gamma)
-    {
-        Real[,] M = new Real[4, 4];
-        
-        Real MElem (Real k)
-        {
-            return gamma * hx * hy * k / 36;
-        }
-        
-                  M[0, 0] = MElem (4);
-        M[1, 0] = M[0, 1] = MElem (2);
-        M[2, 0] = M[0, 2] = MElem (2);
-        M[3, 0] = M[0, 3] = MElem (1);
-            
-                  M[1, 1] = MElem (4);
-        M[2, 1] = M[1, 2] = MElem (1);
-        M[3, 1] = M[1, 3] = MElem (2);
-            
-                  M[2, 2] = MElem (4);
-        M[3, 2] = M[2, 3] = MElem (2);
-            
-                  M[3, 3] = MElem (4);
-
-        return M;
-    }
-    
     Real[] LocalBVector (
         int subDom,
         Real x0, Real x1,
