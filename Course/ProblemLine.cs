@@ -32,7 +32,7 @@ class ProblemLine {
     // folder - директория с условиями задачи
     public ProblemLine(TaskFuncs taskFunctions, string taskFolder)
     {
-        var json = File.ReadAllText(Path.Combine(taskFolder, "ProblemParams.json"));
+        var json = File.ReadAllText("ProblemParams.json");
         problemParams = JsonSerializer.Deserialize<ProblemParams>(json)!;
         
         json = File.ReadAllText(Path.Combine(taskFolder, "RefineParams.json"));
@@ -41,113 +41,6 @@ class ProblemLine {
         _funcs = taskFunctions;
         Repurpose(taskFunctions, taskFolder);
     }
-    
-    
-    
-    // int? GetSubdomAtNode (int x, int y)
-    // {
-    //     foreach (var a in computationalDomain.Subdomains)
-    //     {
-    //         if (x >= IXw[a.X1] && x <= IXw[a.X2] &&
-    //             y >= IYw[a.Y1] && y <= IYw[a.Y2]
-    //         ) {
-    //             return a.Num;
-    //         }
-    //     }
-        
-    //     return null;
-    // }
-
-    // (int xi, int yi) GetElCoordsAtPoint (Real x, Real y)
-    // {
-    //     int? xi = null;
-    //     int? yi = null;
-    //     for (int i = 0; i < X.Count - 1; i++)
-    //     {
-    //         if (X[i] <= x && x <= X[i+1])
-    //         {
-    //             xi = i;
-    //             break;
-    //         }
-    //     }
-    //     for (int i = 0; i < Y.Count - 1; i++)
-    //     {
-    //         if (Y[i] <= y && y <= Y[i+1])
-    //         {
-    //             yi = i;
-    //             break;
-    //         }
-    //     }
-        
-    //     if (xi == null || yi == null)
-    //     {
-    //         throw new Exception("Point is outside the domain");
-    //     }
-
-    //     return ((int)xi, (int)yi);
-    // }
-    
-    // /* Нахождение значения полученного рещения в вещественной точке */
-    // Real ResultAtPoint(Real x, Real y, Real[] q)
-    // {
-    //     Real result = 0;
-    //     if (!(
-    //           X[0] <= x && x <= X.Last() &&
-    //           Y[0] <= y && y <= Y.Last()
-    //     )) {
-    //         throw new Exception("Функция вне области вычислений");
-    //     }
-
-    //     var (xi, yi) = GetElCoordsAtPoint(x, y);
-
-    //     Real hx = X[xi + 1] - X[xi];
-    //     Real hy = Y[yi + 1] - Y[yi];
-
-    //     var sub_dom = GetSubdomNumAtElCoords(xi, yi);
-    //     if (sub_dom != null)
-    //     {
-    //         var m = new int[4];
-    //         m[0] = yi * X.Count + xi;
-    //         m[1] = m[0] + 1;
-    //         m[2] = (yi + 1) * X.Count + xi;
-    //         m[3] = m[2] + 1;
-            
-    //         result = (
-    //               q[m[0]] * (X[xi + 1] - x) * (Y[yi + 1] - y)
-    //             + q[m[1]] * (x - X[xi])     * (Y[yi + 1] - y)
-    //             + q[m[2]] * (X[xi + 1] - x) * (y - Y[yi])
-    //             + q[m[3]] * (x - X[xi])     * (y - Y[yi])
-    //             ) /hx/hy;
-    //     }
-    //     return result;
-    // }
-
-    // /* Взятие нормы погрешности в пространстве Лебега 2.
-    //     Интеграл считается методом прямоугольников  */
-    // Real IntegrateLebeg2 (Real[] q)
-    // {
-    //     Real sum = 0;
-    //     for (int yi = 0; yi < Y.Count - 1; yi++)
-    //     {
-    //         for (int xi = 0; xi < X.Count - 1; xi++)
-    //         {
-    //             Real x0 = X[xi];
-    //             Real y0 = Y[yi];
-    //             Real hx = X[xi + 1] - x0;
-    //             Real hy = Y[yi + 1] - y0;
-    //             var subdom = GetSubdomNumAtElCoords(xi, yi);
-
-    //             if (subdom != null)
-    //             {
-    //                 Real u = ResultAtPoint(x0 + hx / 2d, y0 + hy / 2d, q);
-    //                 Real u_true = funcs.Answer((int)subdom, x0 + hx / 2d, y0 + hy / 2d);
-    //                 Real func = u_true - u;
-    //                 sum += hx * hy * func * func;
-    //             }
-    //         }
-    //     }
-    //     return Math.Sqrt(sum);
-    // }
     
     // сохранить узлы текущего разбиения как узлы наблюдения
     // void MonitorNodesFix()
@@ -158,23 +51,38 @@ class ProblemLine {
     //     YMonitor = Enumerable.Range(0, slae.mesh.Y.Count).ToArray();
     // }
     
-    Real FirstStepSize(Real stretch, int seg_count, Real gap)
+    /* Взятие нормы погрешности в пространстве Лебега 2.
+        Интеграл считается методом прямоугольников  */
+    Real Lebeg2Err (SparkCL.Memory<Real> q)
     {
-        Real sum;
-        if (stretch != 1d)
+        var mesh = femSlae.Mesh;
+        Real sum = 0;
+        for (int yi = 0; yi < mesh.Y.Count - 1; yi++)
         {
-            sum = (Real)((1 - Math.Pow(stretch, seg_count)) / ((Real)1 - stretch));
-        } else {
-            sum = seg_count;
-        }
+            for (int xi = 0; xi < mesh.X.Count - 1; xi++)
+            {
+                Real x0 = mesh.X[xi];
+                Real y0 = mesh.Y[yi];
+                Real hx = mesh.X[xi + 1] - x0;
+                Real hy = mesh.Y[yi + 1] - y0;
+                var subdom = femSlae.GetSubdomNumAtElCoords(xi, yi);
 
-        return gap / sum;
+                if (subdom.HasValue)
+                {
+                    Real u = femSlae.ResultAt(q, (Real)(x0 + hx / 2d), (Real)(y0 + hy / 2d));
+                    Real u_true = femSlae.AnswerAt((Real)(x0 + hx / 2d), (Real)(y0 + hy / 2d));
+                    Real func = u_true - u;
+                    sum += hx * hy * func * func;
+                }
+            }
+        }
+        return (Real)Math.Sqrt(sum);
     }
     
     public void SolveMCG ()
     {
-        var x0 = new SparkCL.Memory<float>(Enumerable.Repeat(0f, femSlae.slae.B.Count).ToArray());
-        var slae = femSlae.slae;
+        var x0 = new SparkCL.Memory<float>(Enumerable.Repeat(0f, femSlae.Slae.B.Count).ToArray());
+        var slae = femSlae.Slae;
         var solver = new BicgStab(
             slae.Mat,
             slae.Di,
@@ -187,9 +95,9 @@ class ProblemLine {
         var info = solver.Solve();
         solver.X.Read();
 
-        var max_err = 0d;
+        Real max_err = 0;
 
-        var mesh = femSlae.mesh;
+        var mesh = femSlae.Mesh;
         int i = 0;
         for (int row = 0; row < mesh.Y.Count; row++)
         {
@@ -205,9 +113,11 @@ class ProblemLine {
             }
         }
         Console.WriteLine($"Max error: {max_err}");
+        Console.WriteLine($"Info: {info}");
+        Console.WriteLine($"Lebeg2 error: {Lebeg2Err(solver.X)}");
     }
-    
-    ComputationalDomain ReadDomains(string taskFolder)
+
+    static ComputationalDomain ReadDomains(string taskFolder)
     {
         var file = new StreamReader(Path.Combine(taskFolder, "ComputationalDomain.txt"));
         ComputationalDomain res;
@@ -233,8 +143,8 @@ class ProblemLine {
 
         return res;
     }
-    
-    BoundaryCondition[] ReadConditions(string taskFolder)
+
+    static BoundaryCondition[] ReadConditions(string taskFolder)
     {
         var file = new StreamReader(Path.Combine(taskFolder, "BoundaryConditions.txt"));
         

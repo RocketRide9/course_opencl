@@ -37,7 +37,7 @@ public class RectMesh
         IYw = Enumerable.Range(0, Y.Count).ToList();
     }
 
-    Real FirstStepSize(Real stretch, int seg_count, Real gap)
+    static Real FirstStepSize(Real stretch, int seg_count, Real gap)
     {
         Real sum;
         if (stretch != 1d)

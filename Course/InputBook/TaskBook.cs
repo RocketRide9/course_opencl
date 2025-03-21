@@ -85,6 +85,12 @@ class TaskBook : TaskFuncs
         {
             0 => 2,
             1 => (Real) (0.1*x + 1.8),
+            // для чисто первого рода
+            2 => (Real) (0.1*x + 1.8),
+            3 => x,
+            4 => x,
+            5 => (Real) (0.1*x + 1.8),
+            6 => x,
             _ => throw new ArgumentException("Некорректный номер условия"),
         };
     }    

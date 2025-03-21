@@ -3,15 +3,38 @@ using Real = float;
 class FEMSlae
 {
     Slae _slae;
-    public Slae slae { get => _slae; }
+    public Slae Slae { get => _slae; }
     RectMesh _mesh;
-    public RectMesh mesh { get => _mesh; }
+    public RectMesh Mesh { get => _mesh; }
 
-    TaskFuncs _funcs;
+    readonly Real[,] _localG1 = {
+        { 2, -2,  1, -1},
+        {-2,  2, -1,  1},
+        { 1, -1,  2, -2},
+        {-1,  1, -2,  2},
+    };
+    readonly Real[,] _localG2 = {
+        { 2,  1, -2, -1},
+        { 1,  2, -1, -2},
+        {-2, -1,  2,  1},
+        {-1, -2,  1,  2},
+    };
+    readonly Real[,] _localM = {
+        {4, 2, 2, 1},
+        {2, 4, 1, 2},
+        {2, 1, 4, 2},
+        {1, 2, 2, 4},
+    };
+
+    readonly TaskFuncs _funcs;
     
+    // Перестроить СЛАУ с разбитой сеткой
     void MeshRefine(RefineParams refineParams)
     {
         _mesh.Refine(refineParams);
+        GlobalMatrixInit();
+        GlobalMatrixBuild();
+        BoundaryConditionsApply();
     }
     
     public FEMSlae(RectMesh mesh, TaskFuncs funcs, RefineParams? refineParams)
@@ -22,7 +45,7 @@ class FEMSlae
 
         if (refineParams != null)
         {
-            MeshRefine(refineParams.Value);
+            _mesh.Refine(refineParams.Value);
         }
         
         GlobalMatrixInit();
@@ -34,9 +57,9 @@ class FEMSlae
     {
         GlobalMatrixPortraitCompose();
 
-        _slae.Mat = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, slae.Ja.Count).ToArray());
-        _slae.Di = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, slae.Ia.Count - 1).ToArray());
-        _slae.B =  new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, slae.Ia.Count - 1).ToArray());
+        _slae.Mat = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, Slae.Ja.Count).ToArray());
+        _slae.Di = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
+        _slae.B =  new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
     }
     
     /* Перевод координаты x до разбития в координату после разбития расчётной
@@ -97,20 +120,20 @@ class FEMSlae
             m[0] = b1 * _mesh.X.Count + a1;
             m[1] = b2 * _mesh.X.Count + a2;
 
-            slae.B[m[0]] = localB[0];
-            slae.B[m[1]] = localB[1];
+            Slae.B[m[0]] = localB[0];
+            Slae.B[m[1]] = localB[1];
 
-            slae.Di[m[0]] = 1;
-            slae.Di[m[1]] = 1;
+            Slae.Di[m[0]] = 1;
+            Slae.Di[m[1]] = 1;
 
             /* Обнуление строки */
             for (int idx = 0; idx < 2; idx++)
             {
-                int ig0 = slae.Ia[m[idx]];
-                int ig1 = slae.Ia[m[idx]+1];
+                int ig0 = Slae.Ia[m[idx]];
+                int ig1 = Slae.Ia[m[idx]+1];
                 for (int i = ig0; i < ig1; i++)
                 {
-                    slae.Mat[i] = 0;
+                    Slae.Mat[i] = 0;
                 }
             }
             e1 = e2;
@@ -165,8 +188,8 @@ class FEMSlae
 
             int node1_num = b1 * _mesh.X.Count + a1;
             int node2_num = b2 * _mesh.X.Count + a2;
-            slae.B[node1_num] += localB[0];
-            slae.B[node2_num] += localB[1];
+            Slae.B[node1_num] += localB[0];
+            Slae.B[node2_num] += localB[1];
 
             e1 = e2;
         }
@@ -224,15 +247,15 @@ class FEMSlae
             m[0] = b1 * _mesh.X.Count + a1;
             m[1] = b2 * _mesh.X.Count + a2;
 
-            slae.B[m[0]] += localB[0];
-            slae.B[m[1]] += localB[1];
+            Slae.B[m[0]] += localB[0];
+            Slae.B[m[1]] += localB[1];
 
-            slae.Di[m[0]] += localA[0, 0];
-            slae.Di[m[1]] += localA[1, 1];
+            Slae.Di[m[0]] += localA[0, 0];
+            Slae.Di[m[1]] += localA[1, 1];
 
             for (int i = 0; i < 2; i++)
             {
-                int beg = slae.Ia[m[i]];
+                int beg = Slae.Ia[m[i]];
                 for (int j = 0; j < 2; j++)
                 {
                     // TODO: возможно есть лучше способ пропускать диагональные
@@ -241,11 +264,11 @@ class FEMSlae
                     {
                         continue;
                     }
-                    int end = slae.Ia[m[i] + 1] - 1;
+                    int end = Slae.Ia[m[i] + 1] - 1;
                     while (beg < end)
                     {
                         int mid = (beg + end) / 2;
-                        if (m[j] > slae.Ja[mid])
+                        if (m[j] > Slae.Ja[mid])
                         {
                             beg = mid + 1;
                         }
@@ -255,12 +278,12 @@ class FEMSlae
                         }
                     }
 
-                    if (slae.Ja[beg] != m[j])
+                    if (Slae.Ja[beg] != m[j])
                     {
                         throw new Exception("Quick search failed");
                     }
 
-                    slae.Mat[beg] += localA[i, j];
+                    Slae.Mat[beg] += localA[i, j];
                     beg++;
                 }
             }
@@ -320,14 +343,14 @@ class FEMSlae
         }
         
         
-        HashSet<int>[] list = new HashSet<int>[mesh.nodesCount];
+        HashSet<int>[] list = new HashSet<int>[Mesh.nodesCount];
         for (int i = 0; i < list.Length; i++)
         {
             list[i] = [];
         }
 
         /* цикл по всем конечным элементам */
-        for (int ielem = 0; ielem < mesh.feCount; ielem++)
+        for (int ielem = 0; ielem < Mesh.feCount; ielem++)
         {
             /* цикл по всем узлам данного к.э. */
             for (int idx0 = 0; idx0 < numberOfUnknowns(ielem); idx0++)
@@ -349,11 +372,11 @@ class FEMSlae
         }
 
         _slae.Ia = new SparkCL.Memory<int>(list.Length + 1);
-        slae.Ia[0] = 0;
+        Slae.Ia[0] = 0;
         /* формирование массивов ig jg по списку list */
-        for (int i = 1; i < slae.Ia.Count; i++)
+        for (int i = 1; i < Slae.Ia.Count; i++)
         {
-            slae.Ia[i] = slae.Ia[i-1] + list[i-1].Count;
+            Slae.Ia[i] = Slae.Ia[i-1] + list[i-1].Count;
         }
         _slae.Ja = new SparkCL.Memory<int>(_slae.Ia[list.Length]);
         for (var i = 0; i < list.Length; i++)
@@ -366,7 +389,7 @@ class FEMSlae
         }
     }
     
-    int? GetSubdomNumAtElCoords (int x1, int y1)
+    public int? GetSubdomNumAtElCoords (int x1, int y1)
     {
         foreach (var a in _mesh.SubDomains)
         {
@@ -394,6 +417,35 @@ class FEMSlae
         return null;
     }
     
+    (int xi, int yi) GetElCoordsAtPoint(Real x, Real y)
+    {
+        int xi = -1;
+        int yi = -1;
+        for (int i = 0; i < _mesh.X.Count; i++)
+        {
+            if (_mesh.X[i] <= x && x <= _mesh.X[i+1])
+            {
+                xi = i;
+                break;
+            }
+        }
+        
+        for (int i = 0; i < _mesh.Y.Count; i++)
+        {
+            if (_mesh.Y[i] <= y && y <= _mesh.Y[i+1])
+            {
+                yi = i;
+                break;
+            }
+        }
+
+        if (xi < 0 || yi < 0)
+        {
+            throw new Exception("Bad");
+        }
+        return (xi, yi);
+    }
+    
     public Real AnswerAt (Real x, Real y)
     {
         var num = GetSubdomNumAtPoint(x, y);
@@ -406,7 +458,121 @@ class FEMSlae
             return 0;
         }
     }
+    
+    public Real ResultAt(SparkCL.Memory<Real> q, Real x, Real y)
+    {
+        var X = _mesh.X;
+        var Y = _mesh.Y;
+        Real result = 0;
 
+        var (xi, yi) = GetElCoordsAtPoint(x, y);
+
+        Real hx = X[xi + 1] - X[xi];
+        Real hy = Y[yi + 1] - Y[yi];
+
+        var subdom = GetSubdomNumAtElCoords(xi, yi);
+        if (subdom.HasValue)
+        {
+            var m = new int[4];
+            m[0] = yi * X.Count + xi;
+            m[1] = m[0] + 1;
+            m[2] = (yi + 1) * X.Count + xi;
+            m[3] = m[2] + 1;
+            
+            result =
+            ( q[m[0]] * (X[xi + 1] - x) * (Y[yi + 1] - y)
+            + q[m[1]] * (x - X[xi])     * (Y[yi + 1] - y)
+            + q[m[2]] * (X[xi + 1] - x) * (y - Y[yi])
+            + q[m[3]] * (x - X[xi])     * (y - Y[yi])) /hx/hy;
+        }
+        return result;
+    }
+
+    void GlobalMatrixBuildParallel ()
+    {
+        Real GetGammaAverage (int dom, int x0, int y0)
+        {
+            Real res = _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0])     
+                       + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
+                       + _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
+                       + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
+    
+            return res / 4;
+        }
+    
+        Real GetLamdaAverage (int dom, int x0, int y0)
+        {
+            Real res = _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0])     
+                       + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
+                       + _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
+                       + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
+    
+            return res / 4;
+        }
+
+        for (int yi = 0; yi < _mesh.Y.Count - 1; yi++)
+        {
+            for (int xi = 0; xi < _mesh.X.Count - 1; xi++)
+            {
+                int targetNode = yi * _mesh.X.Count + xi;
+                var dom1 = GetSubdomNumAtElCoords(xi-1, yi-1);
+                var dom2 = GetSubdomNumAtElCoords(xi, yi-1);
+                var dom3 = GetSubdomNumAtElCoords(xi-1, yi);
+                var dom4 = GetSubdomNumAtElCoords(xi, yi);
+
+                var r = new int[3];
+                r[1] = targetNode - 1;
+                r[0] = r[1] - _mesh.X.Count;
+                r[2] = r[1] + _mesh.X.Count;
+
+                var mr = new int[3];
+                int beg = Slae.Ia[targetNode];
+                int bound = Slae.Ia[targetNode + 1] - 1;
+                for (int i = 0; i < 3; i++)
+                {
+                    int end = bound;
+                    while (beg < end)
+                    {
+                        int mid = (beg + end) / 2;
+                        if (r[i] > Slae.Ja[mid])
+                        {
+                            beg = mid + 1;
+                        }
+                        else
+                        {
+                            end = mid;
+                        }
+                    }
+
+                    if (Slae.Ja[beg] != r[i])
+                    {
+                        throw new Exception("Quick search failed");
+                    }
+
+                    mr[i] = beg;
+                    beg++;
+                }
+
+                var hx0 = _mesh.X[targetNode] - _mesh.X[targetNode - 1];
+                var hx1 = _mesh.X[targetNode + 1] - _mesh.X[targetNode];
+                var hy0 = _mesh.Y[targetNode] - _mesh.Y[r[0] + 1];
+                var hy1 = _mesh.Y[r[2] + 1] - _mesh.Y[targetNode];
+
+                if (dom1.HasValue)
+                {
+                    var lambda = GetLamdaAverage(dom1.Value, xi, yi);
+                    var gamma = GetGammaAverage(dom1.Value, xi, yi);
+                    // -1 1 -2 2
+                    Slae.Mat[mr[0]] += lambda / 6 * (-hy0 / hx0 - hx1 / hy0);
+                    Slae.Mat[mr[0] + 1] += lambda / 6 * (hy0 / hx0 - 2*hx1 / hy0);
+                    Slae.Mat[mr[1]] += lambda / 6 * (-2*hy0 / hx0 + hx1 / hy0);
+                    Slae.Mat[mr[1] + 1] += lambda / 6 * (2*hy0 / hx0 - 2*hx1 / hy0);
+                }
+
+            }
+        }
+    }
+    
     void GlobalMatrixBuild ()
     {
         Real GetGammaAverage (int dom, int x0, int y0)
@@ -441,86 +607,100 @@ class FEMSlae
                 m[2] = (yi + 1) * _mesh.X.Count + xi;
                 m[3] = m[2] + 1;
                 
-                if (subDom != null)
+                if (subDom == null) continue;
+
+                Real x0 = _mesh.X[xi];
+                Real x1 = _mesh.X[xi + 1];
+                Real y0 = _mesh.Y[yi];
+                Real y1 = _mesh.Y[yi + 1];
+                
+                Real hy = y1 - y0;
+                Real hx = x1 - x0;
+                // Заменить на интеграл от биквадратичного разложения
+                Real l_avg = GetLamdaAverage(subDom.Value, xi, yi);
+                Real g_avg = GetGammaAverage(subDom.Value, xi, yi);
+                var localG = LocalGMatrix(hx, hy, l_avg);
+                var localM = LocalMMatrix(hx, hy, g_avg);
+                var localB = LocalBVector(subDom.Value, x0, x1, y0, y1);
+
+                /* нахождение в ja индексов элементов в al/au, куда
+                    нужно добавить элементы локальных матриц */
+                for (int i = 0; i < 4; i++)
                 {
-                    Real x0 = _mesh.X[xi];
-                    Real x1 = _mesh.X[xi + 1];
-                    Real y0 = _mesh.Y[yi];
-                    Real y1 = _mesh.Y[yi + 1];
-                    
-                    Real h_y = y1 - y0;
-                    Real h_x = x1 - x0;
-                    // Заменить на интеграл от биквадратичного разложения
-                    Real gamma_average = GetGammaAverage((int)subDom, xi, yi);
-                    Real lamda_average = GetLamdaAverage((int)subDom, xi, yi);
-                    var localG = LocalGMatrix(h_x, h_y, lamda_average);
-                    var localM = LocalMMatrix(h_x, h_y, gamma_average);
-                    var localB = LocalBVector((int)subDom, x0, x1, y0, y1);
-
-                    /* нахождение в ja индексов элементов в al/au, куда
-                        нужно добавить элементы локальных матриц */
-                    for (int i = 0; i < 4; i++)
+                    var v1 = localG[i, i] + localM[i, i];
+                    var v2 = l_avg/6 * (hy/hx * _localG1[i, i] + hx/hy * _localG2[i, i])
+                        + g_avg/36 * hx*hy * _localM[i, i];
+                    if (Math.Abs(v1 - v2) > 1e-5)
                     {
-                        slae.Di[m[i]] += localG[i, i] + localM[i, i];
-                        int beg = slae.Ia[m[i]];
-                        for (int j = 0; j < 4; j++)
+                        throw new Exception($"oh {Math.Abs(v1 - v2)}");
+                    }
+                    Slae.Di[m[i]] += v2;
+
+                    int beg = Slae.Ia[m[i]];
+                    for (int j = 0; j < 4; j++)
+                    {
+                        // TODO: пропуск
+                        if (i == j)
                         {
-                            // TODO: пропуск
-                            if (i == j)
-                            {
-                                continue;
-                            }
-                            int end = slae.Ia[m[i] + 1] - 1;
-                            while (beg < end)
-                            {
-                                int mid = (beg + end) / 2;
-                                if (m[j] > slae.Ja[mid])
-                                {
-                                    beg = mid + 1;
-                                }
-                                else
-                                {
-                                    end = mid;
-                                }
-                            }
-
-                            if (slae.Ja[beg] != m[j])
-                            {
-                                throw new Exception("Quick search failed");
-                            }
-
-                            slae.Mat[beg] += localG[i, j] + localM[i, j];
-                            beg++;
+                            continue;
                         }
+                        int end = Slae.Ia[m[i] + 1] - 1;
+                        while (beg < end)
+                        {
+                            int mid = (beg + end) / 2;
+                            if (m[j] > Slae.Ja[mid])
+                            {
+                                beg = mid + 1;
+                            }
+                            else
+                            {
+                                end = mid;
+                            }
+                        }
+
+                        if (Slae.Ja[beg] != m[j])
+                        {
+                            throw new Exception("Quick search failed");
+                        }
+
+                        v1 = localG[i, j] + localM[i, j];
+                        v2 = l_avg/6 * (hy/hx * _localG1[i, j] + hx/hy * _localG2[i, j])
+                            + g_avg/36 * hx*hy * _localM[i, j];
+                        if (Math.Abs(v1 - v2) > 1e-5)
+                        {
+                            throw new Exception($"oh {Math.Abs(v1 - v2)}");
+                        }
+                        Slae.Mat[beg] += v2;
+                        beg++;
                     }
-                    
-                    /* добавление локальной правой части в слау */
-                    for (int i = 0; i < 4; i++)
-                    {
-                        slae.B[m[i]] += localB[i];
-                    }
+                }
+                
+                /* добавление локальной правой части в слау */
+                for (int i = 0; i < 4; i++)
+                {
+                    Slae.B[m[i]] += localB[i];
                 }
             }
         }
 
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
-        for (int i = 0; i < slae.Di.Count; i++)
+        for (int i = 0; i < Slae.Di.Count; i++)
         {
-            if (slae.Di[i] == 0)
+            if (Slae.Di[i] == 0)
             {
-                slae.Di[i] = 1;
+                Slae.Di[i] = 1;
             }
         }
     }
-    
-    Real[,] LocalGMatrix(Real hx, Real hy, Real gamma)
+
+    static Real[,] LocalGMatrix(Real hx, Real hy, Real lambda)
     {
         Real[,] G = new Real[4, 4];
         
         Real GElem (Real k1, Real k2)
         {
-            return gamma * (hy / hx / k1 + hx / hy / k2);
+            return lambda * (hy / hx / k1 + hx / hy / k2);
         }
                   G[0, 0] = GElem ( 3,  3);
         G[1, 0] = G[0, 1] = GElem (-3,  6);
@@ -539,7 +719,7 @@ class FEMSlae
         return G;
     }
 
-    Real[,] LocalMMatrix(Real hx, Real hy, Real gamma)
+    static Real[,] LocalMMatrix(Real hx, Real hy, Real gamma)
     {
         Real[,] M = new Real[4, 4];
         

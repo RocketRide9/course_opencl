@@ -6,10 +6,10 @@ class Course
     static void Main(string[] args)
     {
         Core.Init();
-        Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
+        Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
         var task = new TaskBook();
-        var prob = new ProblemLine(task, "../../../../InputBook");
+        var prob = new ProblemLine(task, "../../../InputBook");
         prob.SolveMCG();
     }
 }
