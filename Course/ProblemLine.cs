@@ -53,7 +53,7 @@ class ProblemLine {
     
     /* Взятие нормы погрешности в пространстве Лебега 2.
         Интеграл считается методом прямоугольников  */
-    Real Lebeg2Err (SparkCL.Memory<Real> q)
+    Real Lebeg2Err (SparkOCL.Array<Real> q)
     {
         var mesh = femSlae.Mesh;
         Real sum = 0;
@@ -81,7 +81,7 @@ class ProblemLine {
     
     public void SolveMCG ()
     {
-        var x0 = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
+        var x0 = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
         var slae = femSlae.Slae;
         var solver = new BicgStab(
             slae.Mat,
@@ -94,7 +94,7 @@ class ProblemLine {
             problemParams.eps
         );
         var info = solver.Solve();
-        solver.X.Read();
+        x0 = info.ans;
 
         Real max_err = 0;
 
@@ -105,7 +105,7 @@ class ProblemLine {
             for (int col = 0; col < mesh.X.Count; col++)
             {
                 var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
-                var err = Math.Abs(ans - solver.X[i]);
+                var err = Math.Abs(ans - x0[i]);
                 if (err > max_err)
                 {
                     max_err = err;
@@ -115,7 +115,48 @@ class ProblemLine {
         }
         //Console.WriteLine($"Max error: {max_err}");
         //Console.WriteLine($"Info: {info}");
-        Console.WriteLine($"Lebeg2 error: {Lebeg2Err(solver.X)}");
+        Console.Write($"Error: {Lebeg2Err(x0)}, Iters: {info.iter}, ");
+        var (ioTime, kernTime) = SparkCL.Core.MeasureTime();
+        Console.WriteLine($"IO: {ioTime / 1e6}мс, Kernels: {kernTime / 1e6}мс");
+    }
+
+    public void SolveMcgMkl ()
+    {
+        var x0 = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
+        var slae = femSlae.Slae;
+        var solver = new BiCGStabMkl(
+            slae.Mat,
+            slae.Di,
+            slae.B,
+            slae.Ia,
+            slae.Ja,
+            x0,
+            problemParams.maxIter,
+            problemParams.eps
+        );
+        var info = solver.Solve();
+        x0 = info.ans;
+
+        Real max_err = 0;
+
+        var mesh = femSlae.Mesh;
+        int i = 0;
+        for (int row = 0; row < mesh.Y.Count; row++)
+        {
+            for (int col = 0; col < mesh.X.Count; col++)
+            {
+                var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
+                var err = Math.Abs(ans - x0[i]);
+                if (err > max_err)
+                {
+                    max_err = err;
+                }
+                i++;
+            }
+        }
+        //Console.WriteLine($"Max error: {max_err}");
+        //Console.WriteLine($"Info: {info}");
+        Console.WriteLine($"Error: {Lebeg2Err(x0)}, Iters: {info.iter}");
     }
 
     static ComputationalDomain ReadDomains(string taskFolder)

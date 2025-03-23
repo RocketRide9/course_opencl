@@ -66,9 +66,9 @@ class FEMSlae
     {
         GlobalMatrixPortraitCompose();
 
-        _slae.Mat = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, Slae.Ja.Count).ToArray());
-        _slae.Di = new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
-        _slae.B =  new SparkCL.Memory<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
+        _slae.Mat = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, Slae.Ja.Count).ToArray());
+        _slae.Di = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
+        _slae.B =  new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
     }
     
     /* Перевод координаты x до разбития в координату после разбития расчётной
@@ -380,14 +380,14 @@ class FEMSlae
             }
         }
 
-        _slae.Ia = new SparkCL.Memory<int>(list.Length + 1);
+        _slae.Ia = new SparkOCL.Array<int>(list.Length + 1);
         Slae.Ia[0] = 0;
         /* формирование массивов ig jg по списку list */
         for (int i = 1; i < Slae.Ia.Count; i++)
         {
             Slae.Ia[i] = Slae.Ia[i-1] + list[i-1].Count;
         }
-        _slae.Ja = new SparkCL.Memory<int>(_slae.Ia[list.Length]);
+        _slae.Ja = new SparkOCL.Array<int>(_slae.Ia[list.Length]);
         for (var i = 0; i < list.Length; i++)
         {
             var row = list[i].Order().ToArray();
@@ -468,7 +468,7 @@ class FEMSlae
         }
     }
     
-    public Real ResultAt(SparkCL.Memory<Real> q, Real x, Real y)
+    public Real ResultAt(SparkOCL.Array<Real> q, Real x, Real y)
     {
         var X = _mesh.X;
         var Y = _mesh.Y;

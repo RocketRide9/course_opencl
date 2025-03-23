@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="../SparkCL/SparkCL.csproj" />
     <ProjectReference Include="../SparkAlgos/SparkAlgos.csproj" />
+    <PackageReference Include="TelmaQuasar.Native.Int" Version="2.0.0" />
   </ItemGroup>    
 
   <ItemGroup>

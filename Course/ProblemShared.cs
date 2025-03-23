@@ -40,11 +40,11 @@ public struct BoundaryCondition
 public struct Slae
 {
     // public Real[] Di;
-    public SparkCL.Memory<Real> Mat;
-    public SparkCL.Memory<Real> Di;
-    public SparkCL.Memory<Real> B;
-    public SparkCL.Memory<int> Ia;
-    public SparkCL.Memory<int> Ja;
+    public SparkOCL.Array<Real> Mat;
+    public SparkOCL.Array<Real> Di;
+    public SparkOCL.Array<Real> B;
+    public SparkOCL.Array<int> Ia;
+    public SparkOCL.Array<int> Ja;
 }
 
 public struct ComputationalDomain
