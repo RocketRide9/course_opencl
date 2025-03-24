@@ -79,7 +79,7 @@ class ProblemLine {
         return (Real)Math.Sqrt(sum);
     }
     
-    public void SolveMCG ()
+    public (double err, int iters, int kern, int io) SolveMCG ()
     {
         var x0 = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
         var slae = femSlae.Slae;
@@ -96,31 +96,33 @@ class ProblemLine {
         var info = solver.Solve();
         x0 = info.ans;
 
-        Real max_err = 0;
+        // var mesh = femSlae.Mesh;
+        // Real max_err = 0;
+        // int i = 0;
+        // for (int row = 0; row < mesh.Y.Count; row++)
+        // {
+        //     for (int col = 0; col < mesh.X.Count; col++)
+        //     {
+        //         var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
+        //         var err = Math.Abs(ans - x0[i]);
+        //         if (err > max_err)
+        //         {
+        //             max_err = err;
+        //         }
+        //         i++;
+        //     }
+        // }
 
-        var mesh = femSlae.Mesh;
-        int i = 0;
-        for (int row = 0; row < mesh.Y.Count; row++)
-        {
-            for (int col = 0; col < mesh.X.Count; col++)
-            {
-                var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
-                var err = Math.Abs(ans - x0[i]);
-                if (err > max_err)
-                {
-                    max_err = err;
-                }
-                i++;
-            }
-        }
-        //Console.WriteLine($"Max error: {max_err}");
-        //Console.WriteLine($"Info: {info}");
-        Console.Write($"Error: {Lebeg2Err(x0)}, Iters: {info.iter}, ");
+        var err = Lebeg2Err(x0);
         var (ioTime, kernTime) = SparkCL.Core.MeasureTime();
-        Console.WriteLine($"IO: {ioTime / 1e6}мс, Kernels: {kernTime / 1e6}мс");
+        return (err, info.iter, (int)(kernTime / 1e6), (int)(ioTime / 1e6));
+        // Console.WriteLine($"Max error: {max_err}");
+        // Console.WriteLine($"Info: {info}");
+        // Console.Write($"Error: {Lebeg2Err(x0)}, Iters: {info.iter}, ");
+        // Console.WriteLine($"IO: {ioTime / 1e6}мс, Kernels: {kernTime / 1e6}мс");
     }
 
-    public void SolveMcgMkl ()
+    public (double err, int iters) SolveMcgMkl ()
     {
         var x0 = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
         var slae = femSlae.Slae;
@@ -137,26 +139,25 @@ class ProblemLine {
         var info = solver.Solve();
         x0 = info.ans;
 
-        Real max_err = 0;
-
-        var mesh = femSlae.Mesh;
-        int i = 0;
-        for (int row = 0; row < mesh.Y.Count; row++)
-        {
-            for (int col = 0; col < mesh.X.Count; col++)
-            {
-                var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
-                var err = Math.Abs(ans - x0[i]);
-                if (err > max_err)
-                {
-                    max_err = err;
-                }
-                i++;
-            }
-        }
-        //Console.WriteLine($"Max error: {max_err}");
-        //Console.WriteLine($"Info: {info}");
-        Console.WriteLine($"Error: {Lebeg2Err(x0)}, Iters: {info.iter}");
+        // Real max_err = 0;
+        // var mesh = femSlae.Mesh;
+        // int i = 0;
+        // for (int row = 0; row < mesh.Y.Count; row++)
+        // {
+        //     for (int col = 0; col < mesh.X.Count; col++)
+        //     {
+        //         var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
+        //         var err = Math.Abs(ans - x0[i]);
+        //         if (err > max_err)
+        //         {
+        //             max_err = err;
+        //         }
+        //         i++;
+        //     }
+        // }
+        
+        var err = Lebeg2Err(x0);
+        return (err, info.iter);
     }
 
     static ComputationalDomain ReadDomains(string taskFolder)
