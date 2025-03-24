@@ -176,7 +176,7 @@ public class BiCGStabMkl
             pp = pp1;
         }
 
-        MSRMul(_mat, _di, _ja, _ia, _x.Count, _x, t);
+        MSRMul(_mat, _di, _ia, _ja, _x.Count, _x, t);
         _b.CopyTo(r);
         BLAS.axpy(_x.Count, -1, t.AsSpan(), r.AsSpan());
         rr = (Real)BLAS.dot(r.Count, r.AsSpan(), r.AsSpan());
