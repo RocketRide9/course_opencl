@@ -69,10 +69,9 @@ public class BiCGStabMkl
     // y *= x
     static void Vmul(SparkOCL.Array<Real> y, SparkOCL.Array<Real> x)
     {
-        for (int i = 0; i < y.Count; i++)
-        {
+        MyFor(0, y.Count, (i) => {
             y[i] *= x[i];
-        }
+        });
     }
     // y = y*(-1/2)
     static void Rsqrt(SparkOCL.Array<Real> y)

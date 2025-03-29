@@ -13,23 +13,55 @@ class Course
 
         var task = new TaskRect4x5();
 
+        for (int g = 0; g < 3; g++)
+        {
+            var prob = new ProblemLine(task, "../../../InputRect4x5");
+            sw.Start();
+            var (ans, iters) = prob.SolveBiCGStabMkl();
+            sw.Stop();
+            var err = prob.Lebeg2Err(ans);
+            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс");
+            sw.Reset();
+
+            prob = new ProblemLine(task, "../../../InputRect4x5");
+            sw.Start();
+            (ans, iters) = prob.SolveBiCGStab();
+            sw.Stop();
+            err = prob.Lebeg2Err(ans);
+            var (ioTime, kernTime) = Core.MeasureTime();
+            ioTime /= (ulong)1e+6;
+            kernTime /= (ulong)1e+6;
+            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
+            sw.Reset();
+
+            Console.WriteLine();
+        }
+
+        return;
         for (int g = 0; g < 7; g++)
         {
             
             var prob = new ProblemLine(task, "../../../InputRect4x5");
             sw.Start();
-            var info = prob.SolveMCG();
+            var (ans, iters) = prob.SolveBiCGStab();
             sw.Stop();
-            Console.WriteLine($"{info.err} {info.iters} {sw.ElapsedMilliseconds}мс: {info.kern}мс + {info.io}мс");
+            var err = prob.Lebeg2Err(ans);
+            var (ioTime, kernTime) = Core.MeasureTime();
+            ioTime /= (ulong)1e+6;
+            kernTime /= (ulong)1e+6;
+            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
             sw.Reset();
 
             for (int i = 0; i < 4; i++)
             {
                 prob.femSlae.MeshDouble();
                 sw.Start();
-                info = prob.SolveMCG();
+                (ans, iters) = prob.SolveBiCGStab();
                 sw.Stop();
-                Console.WriteLine($"{info.err} {info.iters} {sw.ElapsedMilliseconds}мс: {info.kern}мс + {info.io}мс");
+                (ioTime, kernTime) = Core.MeasureTime();
+                ioTime /= (ulong)1e+6;
+                kernTime /= (ulong)1e+6;
+                Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
                 sw.Reset();
             }
             
@@ -37,18 +69,18 @@ class Course
     
             prob = new ProblemLine(task, "../../../InputRect4x5");
             sw.Start();
-            var info_mkl = prob.SolveMcgMkl();
+            (ans, iters) = prob.SolveBiCGStabMkl();
             sw.Stop();
-            Console.WriteLine($"{info_mkl.err} {info_mkl.iters} {sw.ElapsedMilliseconds}мс");
+            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс");
             sw.Reset();
     
             for (int i = 0; i < 4; i++)
             {
                 prob.femSlae.MeshDouble();
                 sw.Start();
-                info_mkl = prob.SolveMcgMkl();
+                (ans, iters) = prob.SolveBiCGStabMkl();
                 sw.Stop();
-                Console.WriteLine($"{info_mkl.err} {info_mkl.iters} {sw.ElapsedMilliseconds}мс");
+                Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс");
                 sw.Reset();
             }
             
