@@ -3,40 +3,39 @@
 using Real = float;
 using Quasar.Native;
 
-
 public class BiCGStabMkl
 {
-    SparkOCL.Array<Real> _mat;
-    SparkOCL.Array<Real> _di;
-    SparkOCL.Array<Real> _b;
-    SparkOCL.Array<int> _ia;
-    SparkOCL.Array<int> _ja;
+    Real[] _mat;
+    Real[] _di;
+    Real[] _b;
+    int[] _ia;
+    int[] _ja;
 
     int _maxIter;
     Real _eps;
-    SparkOCL.Array<Real> _x;
+    Real[] _x;
     
-    SparkOCL.Array<Real> r;
-    SparkOCL.Array<Real> di_inv;
-    SparkOCL.Array<Real> y;
-    SparkOCL.Array<Real> z;
-    SparkOCL.Array<Real> ks;
-    SparkOCL.Array<Real> kt;
-    SparkOCL.Array<Real> r_hat;
-    SparkOCL.Array<Real> p;
-    SparkOCL.Array<Real> nu;
-    SparkOCL.Array<Real> h;
-    SparkOCL.Array<Real> s;
-    SparkOCL.Array<Real> t;
+    Real[] r;
+    Real[] di_inv;
+    Real[] y;
+    Real[] z;
+    Real[] ks;
+    Real[] kt;
+    Real[] r_hat;
+    Real[] p;
+    Real[] nu;
+    Real[] h;
+    Real[] s;
+    Real[] t;
     
     public BiCGStabMkl(
-        SparkOCL.Array<Real> Mat,
-        SparkOCL.Array<Real> Di,
-        SparkOCL.Array<Real> B,
-        SparkOCL.Array<int> Ia,
-        SparkOCL.Array<int> Ja,
+        Real[] Mat,
+        Real[] Di,
+        Real[] B,
+        int[] Ia,
+        int[] Ja,
 
-        SparkOCL.Array<Real> x0,
+        Real[] x0,
         int maxIter,
         Real eps)
     {
@@ -51,134 +50,135 @@ public class BiCGStabMkl
 
         _x = x0;
         
-        var zeros = Enumerable.Repeat((Real)0, _b.Count).ToArray();
-        r       = new SparkOCL.Array<Real>(zeros);
-        r_hat   = new SparkOCL.Array<Real>(zeros);
-        p       = new SparkOCL.Array<Real>(zeros);
-        nu      = new SparkOCL.Array<Real>(zeros);
-        h       = new SparkOCL.Array<Real>(zeros);
-        s       = new SparkOCL.Array<Real>(zeros);
-        t       = new SparkOCL.Array<Real>(zeros);
-        di_inv  = new SparkOCL.Array<Real>(zeros);
-        y       = new SparkOCL.Array<Real>(zeros);
-        z       = new SparkOCL.Array<Real>(zeros);
-        ks      = new SparkOCL.Array<Real>(zeros);
-        kt      = new SparkOCL.Array<Real>(zeros);
+        var zeros = Enumerable.Repeat((Real)0, _b.Length).ToArray();
+        r       = [.. zeros];
+        r_hat   = [.. zeros];
+        p       = [.. zeros];
+        nu      = [.. zeros];
+        h       = [.. zeros];
+        s       = [.. zeros];
+        t       = [.. zeros];
+        di_inv  = [.. zeros];
+        y       = [.. zeros];
+        z       = [.. zeros];
+        ks      = [.. zeros];
+        kt      = [.. zeros];
     }
 
     // y *= x
-    static void Vmul(SparkOCL.Array<Real> y, SparkOCL.Array<Real> x)
+    static void Vmul(Real[] y, Real[] x)
     {
-        MyFor(0, y.Count, (i) => {
+        MyFor(0, y.Length, (i) => {
             y[i] *= x[i];
         });
     }
     // y = y*(-1/2)
-    static void Rsqrt(SparkOCL.Array<Real> y)
+    static void Rsqrt(Real[] y)
     {
-        for (int i = 0; i < y.Count; i++)
+        for (int i = 0; i < y.Length; i++)
         {
             y[i] = (Real)( 1 / Math.Sqrt(y[i]) );
         }
     }
     
-    public (SparkOCL.Array<Real> ans, Real rr, Real pp, int iter) Solve()
+    public (Real[] ans, Real rr, Real pp, int iter) Solve()
     {
         // precond
-        _di.CopyTo(di_inv);
+        _di.CopyTo(di_inv, 0);
         Rsqrt(di_inv);
         // 1.
-        MSRMul(_mat, _di, _ia, _ja, _x.Count, _x, t);
-        _b.CopyTo(r);
-        BLAS.axpy(_x.Count, -1, t.AsSpan(), r.AsSpan());
+        MSRMul(_mat, _di, _ia, _ja, _x.Length, _x, t);
+        _b.CopyTo(r, 0);
+        BLAS.axpy(_x.Length, -1, t.AsSpan(), r.AsSpan());
         // 2.
-        r.CopyTo(r_hat);
+        r.CopyTo(r_hat, 0);
         // 3.
-        Real pp = (Real)BLAS.dot(_x.Count, r.AsSpan(), r.AsSpan()); // r_hat * r
+        Real pp = (Real)BLAS.dot(_x.Length, r.AsSpan(), r.AsSpan()); // r_hat * r
         // 4.
-        r.CopyTo(p);
+        r.CopyTo(p, 0);
         
         int iter = 0;
         Real rr;
         for (; iter < _maxIter; iter++)
         {
             // 1.
-            p.CopyTo(y);
+            p.CopyTo(y, 0);
             Vmul(y, di_inv);
             Vmul(y, di_inv);
 
             // 2.
-            MSRMul(_mat, _di, _ia, _ja, _x.Count, y, nu);
+            MSRMul(_mat, _di, _ia, _ja, _x.Length, y, nu);
             
             // 3.
-            Real rnu = (Real)BLAS.dot(_x.Count, r_hat.AsSpan(), nu.AsSpan());
+            Real rnu = (Real)BLAS.dot(_x.Length, r_hat.AsSpan(), nu.AsSpan());
             Real alpha = pp / rnu;
 
             // 4.
-            _x.CopyTo(h);
-            BLAS.axpy(_x.Count, alpha, y.AsSpan(), h.AsSpan());
+            _x.CopyTo(h, 0);
+            BLAS.axpy(_x.Length, alpha, y.AsSpan(), h.AsSpan());
             
             // 5.
-            r.CopyTo(s);
-            BLAS.axpy(_x.Count, -alpha, nu.AsSpan(), s.AsSpan());
+            r.CopyTo(s, 0);
+            BLAS.axpy(_x.Length, -alpha, nu.AsSpan(), s.AsSpan());
 
             // 6.
-            Real ss = (Real)BLAS.dot(_x.Count, s.AsSpan(), s.AsSpan());
+            Real ss = (Real)BLAS.dot(_x.Length, s.AsSpan(), s.AsSpan());
             if (ss < _eps)
             {
-                _x.Dispose();
-                _x = h;
+                h.CopyTo(_x, 0);
+                // _x.Dispose();
+                // _x = h;
                 break;
             }
             
             // 7.
-            s.CopyTo(ks);
+            s.CopyTo(ks, 0);
             Vmul(ks, di_inv);
-            ks.CopyTo(z);
+            ks.CopyTo(z, 0);
             Vmul(z, di_inv);
 
             // 8.
-            MSRMul(_mat, _di, _ia, _ja, _x.Count, z, t);
+            MSRMul(_mat, _di, _ia, _ja, _x.Length, z, t);
 
             // 9.
-            t.CopyTo(kt);
+            t.CopyTo(kt, 0);
             Vmul(kt, di_inv);
             
-            Real ts = (Real)BLAS.dot(_x.Count, ks.AsSpan(), kt.AsSpan());
-            Real tt = (Real)BLAS.dot(_x.Count, kt.AsSpan(), kt.AsSpan());
+            Real ts = (Real)BLAS.dot(_x.Length, ks.AsSpan(), kt.AsSpan());
+            Real tt = (Real)BLAS.dot(_x.Length, kt.AsSpan(), kt.AsSpan());
             Real w = ts / tt;
 
             // 10.
-            h.CopyTo(_x);
-            BLAS.axpy(_x.Count, w, z.AsSpan(), _x.AsSpan());
+            h.CopyTo(_x, 0);
+            BLAS.axpy(_x.Length, w, z.AsSpan(), _x.AsSpan());
 
             // 11.
-            s.CopyTo(r);
-            BLAS.axpy(_x.Count, -w, t.AsSpan(), r.AsSpan());
+            s.CopyTo(r, 0);
+            BLAS.axpy(_x.Length, -w, t.AsSpan(), r.AsSpan());
 
             // 12.
-            rr = (Real)BLAS.dot(_x.Count, r.AsSpan(), r.AsSpan());
+            rr = (Real)BLAS.dot(_x.Length, r.AsSpan(), r.AsSpan());
             if (rr < _eps)
             {
                 break;
             }
             
             // 13-14
-            Real pp1 = (Real)BLAS.dot(_x.Count, r.AsSpan(), r_hat.AsSpan());
+            Real pp1 = (Real)BLAS.dot(_x.Length, r.AsSpan(), r_hat.AsSpan());
             Real beta = (pp1 / pp) * (alpha / w);
             
             // 15.
-            BLAS.axpy(_x.Count, -w, nu.AsSpan(), p.AsSpan());
-            BLAS.scal(_x.Count, beta, p.AsSpan());
-            BLAS.axpy(_x.Count, 1, r.AsSpan(), p.AsSpan());
+            BLAS.axpy(_x.Length, -w, nu.AsSpan(), p.AsSpan());
+            BLAS.scal(_x.Length, beta, p.AsSpan());
+            BLAS.axpy(_x.Length, 1, r.AsSpan(), p.AsSpan());
 
             pp = pp1;
         }
 
-        MSRMul(_mat, _di, _ia, _ja, _x.Count, _x, t);
-        _b.CopyTo(r);
-        BLAS.axpy(_x.Count, -1, t.AsSpan(), r.AsSpan());
-        rr = (Real)BLAS.dot(r.Count, r.AsSpan(), r.AsSpan());
+        MSRMul(_mat, _di, _ia, _ja, _x.Length, _x, t);
+        _b.CopyTo(r, 0);
+        BLAS.axpy(_x.Length, -1, t.AsSpan(), r.AsSpan());
+        rr = (Real)BLAS.dot(r.Length, r.AsSpan(), r.AsSpan());
 
         return (_x, rr, pp, iter);
     }
@@ -211,43 +211,43 @@ public class BiCGStabMkl
     }
     #endif
     
-        public static void MSRMul(
-            SparkOCL.Array<Real> mat,
-            SparkOCL.Array<Real> di,
-            SparkOCL.Array<int> aptr,
-            SparkOCL.Array<int> jptr,
-            int n,
-            SparkOCL.Array<Real> v,
-            SparkOCL.Array<Real> res)
-        {
-            MyFor(0, n, i => {
-                int start = aptr[i];
-                int stop = aptr[i + 1];
-                Real dot = di[i] * v[i];
-                for (int a = start; a < stop; a++)
-                {
-                    dot += mat[a] * v[jptr[a]];
-                }
-                res[i] = dot;
-            });
-        }
-        
-        public static void MyFor(int i0, int i1, Action<int> iteration)
-        {
-#if HOST_PARALLEL
-            var partitioner = System.Collections.Concurrent.Partitioner.Create(i0, i1);
-            Parallel.ForEach(partitioner, (range, state) =>
+    public static void MSRMul(
+        Real[] mat,
+        Real[] di,
+        int[] ia,
+        int[] ja,
+        int n,
+        Real[] v,
+        Real[] res)
+    {
+        MyFor(0, n, i => {
+            int start = ia[i];
+            int stop = ia[i + 1];
+            Real dot = di[i] * v[i];
+            for (int a = start; a < stop; a++)
             {
-                for (int i = range.Item1; i < range.Item2; i++)
-                {
-                    iteration(i);
-                }
-            });
-#else
-            for (int i = i0; i < i1; i++)
+                dot += mat[a] * v[ja[a]];
+            }
+            res[i] = dot;
+        });
+    }
+        
+    public static void MyFor(int i0, int i1, Action<int> iteration)
+    {
+#if HOST_PARALLEL
+        var partitioner = System.Collections.Concurrent.Partitioner.Create(i0, i1);
+        Parallel.ForEach(partitioner, (range, state) =>
+        {
+            for (int i = range.Item1; i < range.Item2; i++)
             {
                 iteration(i);
-            }        
+            }
+        });
+#else
+        for (int i = i0; i < i1; i++)
+        {
+            iteration(i);
+        }        
 #endif
-        }
+    }
 }

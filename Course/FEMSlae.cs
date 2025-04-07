@@ -2,8 +2,8 @@ using Real = float;
 
 class FEMSlae
 {
-    Slae _slae;
-    public Slae Slae { get => _slae; }
+    Slae2 _slae;
+    public Slae2 Slae { get => _slae; }
     RectMesh _mesh;
     public RectMesh Mesh { get => _mesh; }
 
@@ -40,7 +40,7 @@ class FEMSlae
     public FEMSlae(RectMesh mesh, TaskFuncs funcs, RefineParams? refineParams)
     {
         _mesh = mesh;
-        _slae = new Slae();
+        _slae = new Slae2();
         _funcs = funcs;
 
         if (refineParams != null)
@@ -64,11 +64,11 @@ class FEMSlae
 
     void GlobalMatrixInit()
     {
-        GlobalMatrixPortraitCompose();
+        GlobalMatrixPortraitCompose();  
 
-        _slae.Mat = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, Slae.Ja.Count).ToArray());
-        _slae.Di = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
-        _slae.B =  new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, Slae.Ia.Count - 1).ToArray());
+        _slae.Mat = Enumerable.Repeat((Real)0, Slae.Ja.Length).ToArray();
+        _slae.Di = Enumerable.Repeat((Real)0, Slae.Ia.Length - 1).ToArray();
+        _slae.B =  Enumerable.Repeat((Real)0, Slae.Ia.Length - 1).ToArray();
     }
     
     /* Перевод координаты x до разбития в координату после разбития расчётной
@@ -380,14 +380,14 @@ class FEMSlae
             }
         }
 
-        _slae.Ia = new SparkOCL.Array<int>(list.Length + 1);
+        _slae.Ia = new int[list.Length + 1];
         Slae.Ia[0] = 0;
         /* формирование массивов ig jg по списку list */
-        for (int i = 1; i < Slae.Ia.Count; i++)
+        for (int i = 1; i < Slae.Ia.Length; i++)
         {
             Slae.Ia[i] = Slae.Ia[i-1] + list[i-1].Count;
         }
-        _slae.Ja = new SparkOCL.Array<int>(_slae.Ia[list.Length]);
+        _slae.Ja = new int[_slae.Ia[list.Length]];
         for (var i = 0; i < list.Length; i++)
         {
             var row = list[i].Order().ToArray();
@@ -468,7 +468,7 @@ class FEMSlae
         }
     }
     
-    public Real ResultAt(SparkOCL.Array<Real> q, Real x, Real y)
+    public Real ResultAt(Span<Real> q, Real x, Real y)
     {
         var X = _mesh.X;
         var Y = _mesh.Y;
@@ -682,7 +682,7 @@ class FEMSlae
 
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
-        for (int i = 0; i < Slae.Di.Count; i++)
+        for (int i = 0; i < Slae.Di.Length; i++)
         {
             if (Slae.Di[i] == 0)
             {

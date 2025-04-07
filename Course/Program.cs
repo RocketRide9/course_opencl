@@ -1,6 +1,7 @@
 using SparkCL;
 using System.Globalization;
 using System.Diagnostics;
+using Real = float;
 
 class Course
 {
@@ -13,79 +14,85 @@ class Course
 
         var task = new TaskRect4x5();
 
+#if false
         for (int g = 0; g < 3; g++)
         {
             var prob = new ProblemLine(task, "../../../InputRect4x5");
             sw.Start();
-            var (ans, iters) = prob.SolveBiCGStabMkl();
+            var (ans, iters, rr) = prob.SolveBiCGStabMkl();
             sw.Stop();
             var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс");
+            Console.WriteLine($"{err} {iters} discrep: {rr}  {sw.ElapsedMilliseconds}мс");
             sw.Reset();
 
             prob = new ProblemLine(task, "../../../InputRect4x5");
             sw.Start();
-            (ans, iters) = prob.SolveBiCGStab();
+            (ans, iters, rr) = prob.SolveBiCGStab();
             sw.Stop();
             err = prob.Lebeg2Err(ans);
             var (ioTime, kernTime) = Core.MeasureTime();
             ioTime /= (ulong)1e+6;
             kernTime /= (ulong)1e+6;
-            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
+            Console.WriteLine($"{err} {iters} discrep: {rr}  {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
             sw.Reset();
 
             Console.WriteLine();
         }
-
         return;
-        for (int g = 0; g < 7; g++)
+#endif
+        for (int g = 0; g < 2; g++)
         {
-            
-            var prob = new ProblemLine(task, "../../../InputRect4x5");
+            ProblemLine prob;
+            Real err;
+            prob = new ProblemLine(task, "../../../InputRect4x5");
             sw.Start();
-            var (ans, iters) = prob.SolveBiCGStab();
+            var (ans, iters, rr) = prob.SolveBiCGStab();
             sw.Stop();
-            var err = prob.Lebeg2Err(ans);
+            err = prob.Lebeg2Err(ans.AsSpan());
             var (ioTime, kernTime) = Core.MeasureTime();
             ioTime /= (ulong)1e+6;
             kernTime /= (ulong)1e+6;
-            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
+            Console.WriteLine($"{err} {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
             sw.Reset();
 
             for (int i = 0; i < 4; i++)
             {
                 prob.femSlae.MeshDouble();
                 sw.Start();
-                (ans, iters) = prob.SolveBiCGStab();
+                (ans, iters, rr) = prob.SolveBiCGStab();
                 sw.Stop();
+                err = prob.Lebeg2Err(ans.AsSpan());
                 (ioTime, kernTime) = Core.MeasureTime();
                 ioTime /= (ulong)1e+6;
                 kernTime /= (ulong)1e+6;
-                Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
+                Console.WriteLine($"{err} {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
                 sw.Reset();
             }
             
             Console.WriteLine();
-    
+#if false
             prob = new ProblemLine(task, "../../../InputRect4x5");
             sw.Start();
-            (ans, iters) = prob.SolveBiCGStabMkl();
+            var (ans1, iters1, rr1) = prob.SolveBiCGStabMkl();
             sw.Stop();
-            Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс");
+            err = prob.Lebeg2Err(ans1.AsSpan());
+            Console.WriteLine($"{err} {iters1} (discrep: {rr1}) {sw.ElapsedMilliseconds}мс");
             sw.Reset();
     
             for (int i = 0; i < 4; i++)
             {
                 prob.femSlae.MeshDouble();
                 sw.Start();
-                (ans, iters) = prob.SolveBiCGStabMkl();
+                (ans1, iters1, rr1) = prob.SolveBiCGStabMkl();
                 sw.Stop();
-                Console.WriteLine($"{err} {iters} {sw.ElapsedMilliseconds}мс");
+                err = prob.Lebeg2Err(ans1.AsSpan());
+                Console.WriteLine($"{err} {iters1} (discrep: {rr1})  {sw.ElapsedMilliseconds}мс");
                 sw.Reset();
             }
             
             Console.WriteLine();
             Console.WriteLine();
+#endif
         }
     }
 }

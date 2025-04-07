@@ -29,7 +29,7 @@ public struct BoundaryCondition
 {
     // нач. с 0
     public int Num;
-    // род краевого условия (первый, второй ...) нумеруется с 1
+    // тип краевого условия (первый, второй ...) нумеруется с 1
     public int Type;
     public int X1;
     public int X2;
@@ -37,9 +37,17 @@ public struct BoundaryCondition
     public int Y2;
 }
 
-public struct Slae
+public struct Slae2
 {
-    // public Real[] Di;
+    public Real[] Mat;
+    public Real[] Di;
+    public Real[] B;
+    public int[] Ia;
+    public int[] Ja;
+}
+
+public struct Slae1
+{
     public SparkOCL.Array<Real> Mat;
     public SparkOCL.Array<Real> Di;
     public SparkOCL.Array<Real> B;

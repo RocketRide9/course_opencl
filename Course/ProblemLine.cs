@@ -53,7 +53,7 @@ class ProblemLine {
     
     /* Взятие нормы погрешности в пространстве Лебега 2.
         Интеграл считается методом прямоугольников  */
-    public Real Lebeg2Err (SparkOCL.Array<Real> q)
+    public Real Lebeg2Err (Span<Real> q)
     {
         var mesh = femSlae.Mesh;
         Real sum = 0;
@@ -79,9 +79,9 @@ class ProblemLine {
         return (Real)Math.Sqrt(sum);
     }
     
-    public (SparkOCL.Array<Real> ans, int iters) SolveBiCGStab ()
+    public (SparkCL.Accessor<Real> ans, int iters, Real rr) SolveBiCGStab ()
     {
-        var x0 = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
+        var x0 = Enumerable.Repeat((Real)0, femSlae.Slae.B.Length).ToArray();
         var slae = femSlae.Slae;
         var solver = new BicgStab(
             slae.Mat,
@@ -93,9 +93,9 @@ class ProblemLine {
             problemParams.maxIter,
             problemParams.eps
         );
-        var (ans, _, _, iter) = solver.Solve();
+        var (ans, rr, _, iter) = solver.Solve();
 
-        return (ans, iter);
+        return (ans, iter, rr);
 
         // var mesh = femSlae.Mesh;
         // Real max_err = 0;
@@ -115,9 +115,9 @@ class ProblemLine {
         // }
     }
 
-    public (SparkOCL.Array<Real> ans, int iters) SolveBiCGStabMkl ()
+    public (Real[] ans, int iters, Real rr) SolveBiCGStabMkl ()
     {
-        var x0 = new SparkOCL.Array<Real>(Enumerable.Repeat((Real)0, femSlae.Slae.B.Count).ToArray());
+        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.Slae.B.Length)];
         var slae = femSlae.Slae;
         var solver = new BiCGStabMkl(
             slae.Mat,
@@ -129,9 +129,9 @@ class ProblemLine {
             problemParams.maxIter,
             problemParams.eps
         );
-        var (ans, _, _, iter) = solver.Solve();
+        var (ans, rr, _, iter) = solver.Solve();
 
-        return (ans, iter);
+        return (ans, iter, rr);
 
         // Real max_err = 0;
         // var mesh = femSlae.Mesh;
