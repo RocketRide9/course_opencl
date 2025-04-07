@@ -11,7 +11,6 @@ class Course
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
         var sw = new Stopwatch();
-
         var task = new TaskRect4x5();
 
 #if false
@@ -43,51 +42,34 @@ class Course
         for (int g = 0; g < 2; g++)
         {
             ProblemLine prob;
-            Real err;
             prob = new ProblemLine(task, "../../../InputRect4x5");
-            sw.Start();
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            sw.Stop();
-            err = prob.Lebeg2Err(ans.AsSpan());
-            var (ioTime, kernTime) = Core.MeasureTime();
-            ioTime /= (ulong)1e+6;
-            kernTime /= (ulong)1e+6;
-            Console.WriteLine($"{err} {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
-            sw.Reset();
 
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 5; i++)
             {
-                prob.femSlae.MeshDouble();
                 sw.Start();
-                (ans, iters, rr) = prob.SolveBiCGStab();
+                var (ans, iters, rr) = prob.SolveBiCGStab();
                 sw.Stop();
-                err = prob.Lebeg2Err(ans.AsSpan());
-                (ioTime, kernTime) = Core.MeasureTime();
+                var err = prob.Lebeg2Err(ans.AsSpan());
+                var (ioTime, kernTime) = Core.MeasureTime();
                 ioTime /= (ulong)1e+6;
                 kernTime /= (ulong)1e+6;
                 Console.WriteLine($"{err} {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
                 sw.Reset();
+                prob.femSlae.MeshDouble();
             }
             
             Console.WriteLine();
-#if false
+#if true
             prob = new ProblemLine(task, "../../../InputRect4x5");
-            sw.Start();
-            var (ans1, iters1, rr1) = prob.SolveBiCGStabMkl();
-            sw.Stop();
-            err = prob.Lebeg2Err(ans1.AsSpan());
-            Console.WriteLine($"{err} {iters1} (discrep: {rr1}) {sw.ElapsedMilliseconds}мс");
-            sw.Reset();
-    
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 5; i++)
             {
-                prob.femSlae.MeshDouble();
                 sw.Start();
-                (ans1, iters1, rr1) = prob.SolveBiCGStabMkl();
+                var (ans, iters, rr) = prob.SolveBiCGStabMkl();
                 sw.Stop();
-                err = prob.Lebeg2Err(ans1.AsSpan());
-                Console.WriteLine($"{err} {iters1} (discrep: {rr1})  {sw.ElapsedMilliseconds}мс");
+                var err = prob.Lebeg2Err(ans.AsSpan());
+                Console.WriteLine($"{err} {iters} (discrep: {rr})  {sw.ElapsedMilliseconds}мс");
                 sw.Reset();
+                prob.femSlae.MeshDouble();
             }
             
             Console.WriteLine();

@@ -68,17 +68,26 @@ public class BiCGStabMkl
     // y *= x
     static void Vmul(Real[] y, Real[] x)
     {
-        MyFor(0, y.Length, (i) => {
-            y[i] *= x[i];
+        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, y.Length);
+        Parallel.ForEach(partitioner, (range, state) =>
+        {
+            for (int i = range.Item1; i < range.Item2; i++)
+            {
+                y[i] *= x[i];
+            }
         });
     }
     // y = y*(-1/2)
     static void Rsqrt(Real[] y)
     {
-        for (int i = 0; i < y.Length; i++)
+        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, y.Length);
+        Parallel.ForEach(partitioner, (range, state) =>
         {
-            y[i] = (Real)( 1 / Math.Sqrt(y[i]) );
-        }
+            for (int i = range.Item1; i < range.Item2; i++)
+            {
+                y[i] = (Real)(1 / Math.Sqrt(y[i]));
+            }
+        });
     }
     
     public (Real[] ans, Real rr, Real pp, int iter) Solve()
@@ -220,34 +229,20 @@ public class BiCGStabMkl
         Real[] v,
         Real[] res)
     {
-        MyFor(0, n, i => {
-            int start = ia[i];
-            int stop = ia[i + 1];
-            Real dot = di[i] * v[i];
-            for (int a = start; a < stop; a++)
-            {
-                dot += mat[a] * v[ja[a]];
-            }
-            res[i] = dot;
-        });
-    }
-        
-    public static void MyFor(int i0, int i1, Action<int> iteration)
-    {
-#if HOST_PARALLEL
-        var partitioner = System.Collections.Concurrent.Partitioner.Create(i0, i1);
+        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, n);
         Parallel.ForEach(partitioner, (range, state) =>
         {
             for (int i = range.Item1; i < range.Item2; i++)
             {
-                iteration(i);
+                int start = ia[i];
+                int stop = ia[i + 1];
+                Real dot = di[i] * v[i];
+                for (int a = start; a < stop; a++)
+                {
+                    dot += mat[a] * v[ja[a]];
+                }
+                res[i] = dot;
             }
         });
-#else
-        for (int i = i0; i < i1; i++)
-        {
-            iteration(i);
-        }        
-#endif
     }
 }
