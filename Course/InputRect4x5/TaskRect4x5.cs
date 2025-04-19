@@ -2,7 +2,7 @@ using Real = float;
 
 class TaskRect4x5 : TaskFuncs
 {
-    public string Description => "Прямоугольник 4на5";
+    public string Description => "Прямоугольник 4на5 с экспонентой";
 
     public Real Answer(int subdom, Real x, Real y)
     {

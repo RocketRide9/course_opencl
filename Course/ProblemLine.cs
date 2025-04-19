@@ -57,9 +57,9 @@ class ProblemLine {
     {
         var mesh = femSlae.Mesh;
         Real sum = 0;
-        for (int yi = 0; yi < mesh.Y.Count - 1; yi++)
+        for (int yi = 0; yi < mesh.Y.Length - 1; yi++)
         {
-            for (int xi = 0; xi < mesh.X.Count - 1; xi++)
+            for (int xi = 0; xi < mesh.X.Length - 1; xi++)
             {
                 Real x0 = mesh.X[xi];
                 Real y0 = mesh.Y[yi];
@@ -79,6 +79,13 @@ class ProblemLine {
         return (Real)Math.Sqrt(sum);
     }
     
+    
+    
+    public void Serialize()
+    {
+        femSlae.Slae.Serialize();
+    }
+    
     public (SparkCL.Accessor<Real> ans, int iters, Real rr) SolveBiCGStab ()
     {
         var x0 = Enumerable.Repeat((Real)0, femSlae.Slae.B.Length).ToArray();
@@ -96,23 +103,6 @@ class ProblemLine {
         var (ans, rr, _, iter) = solver.Solve();
 
         return (ans, iter, rr);
-
-        // var mesh = femSlae.Mesh;
-        // Real max_err = 0;
-        // int i = 0;
-        // for (int row = 0; row < mesh.Y.Count; row++)
-        // {
-        //     for (int col = 0; col < mesh.X.Count; col++)
-        //     {
-        //         var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
-        //         var err = Math.Abs(ans - x0[i]);
-        //         if (err > max_err)
-        //         {
-        //             max_err = err;
-        //         }
-        //         i++;
-        //     }
-        // }
     }
 
     public (Real[] ans, int iters, Real rr) SolveBiCGStabMkl ()
@@ -132,25 +122,27 @@ class ProblemLine {
         var (ans, rr, _, iter) = solver.Solve();
 
         return (ans, iter, rr);
-
-        // Real max_err = 0;
-        // var mesh = femSlae.Mesh;
-        // int i = 0;
-        // for (int row = 0; row < mesh.Y.Count; row++)
-        // {
-        //     for (int col = 0; col < mesh.X.Count; col++)
-        //     {
-        //         var ans = femSlae.AnswerAt(mesh.X[col], mesh.Y[row]);
-        //         var err = Math.Abs(ans - x0[i]);
-        //         if (err > max_err)
-        //         {
-        //             max_err = err;
-        //         }
-        //         i++;
-        //     }
-        // }
     }
 
+    public (Real[] ans, int iters, Real rr) SolveBiCGStabPure ()
+    {
+        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.Slae.B.Length)];
+        var slae = femSlae.Slae;
+        var solver = new BiCGStabPure(
+            slae.Mat,
+            slae.Di,
+            slae.B,
+            slae.Ia,
+            slae.Ja,
+            x0,
+            problemParams.maxIter,
+            problemParams.eps
+        );
+        var (ans, rr, _, iter) = solver.Solve();
+
+        return (ans, iter, rr);
+    }
+    
     static ComputationalDomain ReadDomains(string taskFolder)
     {
         var file = new StreamReader(Path.Combine(taskFolder, "ComputationalDomain.txt"));

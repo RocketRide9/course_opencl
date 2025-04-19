@@ -1,3 +1,4 @@
+using SparkCL;
 using Real = float;
 
 class FEMSlae
@@ -126,8 +127,8 @@ class FEMSlae
 
             // номера узлов, через которые проъодит первое краевое условие
             var m = new int[2];
-            m[0] = b1 * _mesh.X.Count + a1;
-            m[1] = b2 * _mesh.X.Count + a2;
+            m[0] = b1 * _mesh.X.Length + a1;
+            m[1] = b2 * _mesh.X.Length + a2;
 
             Slae.B[m[0]] = localB[0];
             Slae.B[m[1]] = localB[1];
@@ -195,8 +196,8 @@ class FEMSlae
             localB[0] = h * (2 * k1 + k2) / 6;
             localB[1] = h * (k1 + 2 * k2) / 6;
 
-            int node1_num = b1 * _mesh.X.Count + a1;
-            int node2_num = b2 * _mesh.X.Count + a2;
+            int node1_num = b1 * _mesh.X.Length + a1;
+            int node2_num = b2 * _mesh.X.Length + a2;
             Slae.B[node1_num] += localB[0];
             Slae.B[node2_num] += localB[1];
 
@@ -253,8 +254,8 @@ class FEMSlae
             localB[1] = h * _funcs.Beta(num) * (k1 + 2  * k2) / 6;
 
             var m = new int[2];
-            m[0] = b1 * _mesh.X.Count + a1;
-            m[1] = b2 * _mesh.X.Count + a2;
+            m[0] = b1 * _mesh.X.Length + a1;
+            m[1] = b2 * _mesh.X.Length + a2;
 
             Slae.B[m[0]] += localB[0];
             Slae.B[m[1]] += localB[1];
@@ -337,15 +338,15 @@ class FEMSlae
         int numberOfUnknowns(int i) => 4;
         int idxOfUnknown (int i, int j)
         {
-            int x0 = i % (_mesh.X.Count - 1);
-            int y0 = i / (_mesh.X.Count - 1);
+            int x0 = i % (_mesh.X.Length - 1);
+            int y0 = i / (_mesh.X.Length - 1);
             
             if (j == 0 || j == 1)
             {
-                return y0 * _mesh.X.Count + x0 + j;
+                return y0 * _mesh.X.Length + x0 + j;
             } else if (j == 2 || j == 3)
             {
-                return (y0 + 1) * _mesh.X.Count + x0 + (j - 2);
+                return (y0 + 1) * _mesh.X.Length + x0 + (j - 2);
             } else {
                 throw new ArgumentException("Странная координата конечного элемента");
             }
@@ -430,7 +431,7 @@ class FEMSlae
     {
         int xi = -1;
         int yi = -1;
-        for (int i = 0; i < _mesh.X.Count; i++)
+        for (int i = 0; i < _mesh.X.Length; i++)
         {
             if (_mesh.X[i] <= x && x <= _mesh.X[i+1])
             {
@@ -439,7 +440,7 @@ class FEMSlae
             }
         }
         
-        for (int i = 0; i < _mesh.Y.Count; i++)
+        for (int i = 0; i < _mesh.Y.Length; i++)
         {
             if (_mesh.Y[i] <= y && y <= _mesh.Y[i+1])
             {
@@ -482,10 +483,10 @@ class FEMSlae
         var subdom = GetSubdomNumAtElCoords(xi, yi);
         if (subdom.HasValue)
         {
-            var m = new int[4];
-            m[0] = yi * X.Count + xi;
+            Span<int> m = stackalloc int[4];
+            m[0] = yi * X.Length + xi;
             m[1] = m[0] + 1;
-            m[2] = (yi + 1) * X.Count + xi;
+            m[2] = (yi + 1) * X.Length + xi;
             m[3] = m[2] + 1;
             
             result =
@@ -497,7 +498,7 @@ class FEMSlae
         return result;
     }
 
-    void GlobalMatrixBuildParallel ()
+    void GlobalMatrixBuildParallelV2 ()
     {
         Real GetGammaAverage (int dom, int x0, int y0)
         {
@@ -519,11 +520,11 @@ class FEMSlae
             return res / 4;
         }
 
-        for (int yi = 0; yi < _mesh.Y.Count - 1; yi++)
+        for (int yi = 0; yi < _mesh.Y.Length - 1; yi++)
         {
-            for (int xi = 0; xi < _mesh.X.Count - 1; xi++)
+            for (int xi = 0; xi < _mesh.X.Length - 1; xi++)
             {
-                int targetNode = yi * _mesh.X.Count + xi;
+                int targetNode = yi * _mesh.X.Length + xi;
                 var dom1 = GetSubdomNumAtElCoords(xi-1, yi-1);
                 var dom2 = GetSubdomNumAtElCoords(xi, yi-1);
                 var dom3 = GetSubdomNumAtElCoords(xi-1, yi);
@@ -531,8 +532,8 @@ class FEMSlae
 
                 var r = new int[3];
                 r[1] = targetNode - 1;
-                r[0] = r[1] - _mesh.X.Count;
-                r[2] = r[1] + _mesh.X.Count;
+                r[0] = r[1] - _mesh.X.Length;
+                r[2] = r[1] + _mesh.X.Length;
 
                 var mr = new int[3];
                 int beg = Slae.Ia[targetNode];
@@ -577,58 +578,74 @@ class FEMSlae
                     Slae.Mat[mr[1]] += lambda / 6 * (-2*hy0 / hx0 + hx1 / hy0);
                     Slae.Mat[mr[1] + 1] += lambda / 6 * (2*hy0 / hx0 - 2*hx1 / hy0);
                 }
-
             }
         }
     }
 
-    void GlobalMatrixBuild ()
+    void GlobalMatrixBuild()
     {
-        Real GetGammaAverage (int dom, int x0, int y0)
+        GlobalMatrixBuildImplOcl();
+    }
+    
+    void GlobalMatrixBuildImpl()
+    {
+        // csharp не нравится stackalloc в циклах
+        Span<Real> localB = stackalloc Real[4];
+        Span<int> m = stackalloc int[4];
+        
+        for (int yi = 0; yi < _mesh.Y.Length - 1; yi++)
         {
-            Real res = _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0])
-                       + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
-                       + _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
-                       + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
-
-            return res / 4;
-        }
-
-        Real GetLamdaAverage (int dom, int x0, int y0)
-        {
-            Real res = _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0])
-                       + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
-                       + _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
-                       + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
-
-            return res / 4;
-        }
-
-        for (int yi = 0; yi < _mesh.Y.Count - 1; yi++)
-        {
-            for (int xi = 0; xi < _mesh.X.Count - 1; xi++)
+            for (int xi = 0; xi < _mesh.X.Length - 1; xi++)
             {
                 var subDom = GetSubdomNumAtElCoords(xi, yi);
 
-                var m = new int[4];
-                m[0] = yi * _mesh.X.Count + xi;
+                m[0] = yi * _mesh.X.Length + xi;
                 m[1] = m[0] + 1;
-                m[2] = (yi + 1) * _mesh.X.Count + xi;
+                m[2] = (yi + 1) * _mesh.X.Length + xi;
                 m[3] = m[2] + 1;
 
-                if (subDom == null) continue;
+                if (!subDom.HasValue) continue;
 
                 Real x0 = _mesh.X[xi];
                 Real x1 = _mesh.X[xi + 1];
                 Real y0 = _mesh.Y[yi];
                 Real y1 = _mesh.Y[yi + 1];
 
+                Real GetGammaAverage ()
+                {
+                    Real res = _funcs.Gamma(subDom.Value, x0, y0)
+                             + _funcs.Gamma(subDom.Value, x1, y0)
+                             + _funcs.Gamma(subDom.Value, x0, y1)
+                             + _funcs.Gamma(subDom.Value, x1, y1);
+        
+                    return res / 4;
+                }
+        
+                Real GetLamdaAverage ()
+                {
+                    Real res = _funcs.Lambda(subDom.Value, x0, y0)
+                             + _funcs.Lambda(subDom.Value, x1, y0)
+                             + _funcs.Lambda(subDom.Value, x0, y1)
+                             + _funcs.Lambda(subDom.Value, x1, y1);
+        
+                    return res / 4;
+                }
+                
                 Real hy = y1 - y0;
                 Real hx = x1 - x0;
                 // Заменить на интеграл от биквадратичного разложения
-                Real l_avg = GetLamdaAverage(subDom.Value, xi, yi);
-                Real g_avg = GetGammaAverage(subDom.Value, xi, yi);
-                var localB = LocalBVector(subDom.Value, x0, x1, y0, y1);
+                Real l_avg = GetLamdaAverage();
+                Real g_avg = GetGammaAverage();
+                
+                Real f1 = _funcs.F(subDom.Value, x0, y0);
+                Real f2 = _funcs.F(subDom.Value, x1, y0);
+                Real f3 = _funcs.F(subDom.Value, x0, y1);
+                Real f4 = _funcs.F(subDom.Value, x1, y1);
+
+                localB[0] = hx * hy / 36 * (4 * f1 + 2 * f2 + 2 * f3 +     f4);
+                localB[1] = hx * hy / 36 * (2 * f1 + 4 * f2 +     f3 + 2 * f4);
+                localB[2] = hx * hy / 36 * (2 * f1 +     f2 + 4 * f3 + 2 * f4);
+                localB[3] = hx * hy / 36 * (    f1 + 2 * f2 + 2 * f3 + 4 * f4);
 
                 /* нахождение в ja индексов элементов в al/au, куда
                     нужно добавить элементы локальных матриц */
@@ -690,26 +707,58 @@ class FEMSlae
             }
         }
     }
-    Real[] LocalBVector (
-        int subDom,
-        Real x0, Real x1,
-        Real y0, Real y1
-    ) {
-        var localB = new Real[4];
+    
+    static nuint PaddedTo(int initial, int multiplier)
+    {
+        if (initial % multiplier == 0)
+        {
+            return (nuint) initial;
+        } else {
+            return (nuint) ( (initial / multiplier + 1 ) * multiplier );
+        }
+    }
 
-        Real hy = y1 - y0;
-        Real hx = x1 - x0;
+    void GlobalMatrixBuildImplOcl ()
+    {
+        var prog = new Program("Kernels.clcpp");
+        var kernCompose = prog.GetKernel(
+            "global_matrix_compose",
+            globalWork: new(PaddedTo(Mesh.X.Length, 4), PaddedTo(Mesh.Y.Length, 4)),
+            localWork: new(4, 4)
+        );
+        var mat = new ComputeBuffer<Real>(Slae.Mat);
+        var di = new ComputeBuffer<Real>(Slae.Di);
+        var b = new ComputeBuffer<Real>(Slae.B);
+        var ia = new ComputeBuffer<int>(Slae.Ia);
+        var ja = new ComputeBuffer<int>(Slae.Ja);
+        var x_axis = new ComputeBuffer<Real>(Mesh.X);
+        var y_axis = new ComputeBuffer<Real>(Mesh.Y);
 
-        Real f1 = _funcs.F(subDom, x0, y0);
-        Real f2 = _funcs.F(subDom, x1, y0);
-        Real f3 = _funcs.F(subDom, x0, y1);
-        Real f4 = _funcs.F(subDom, x1, y1);
+        kernCompose.SetArg(0, mat);
+        kernCompose.SetArg(1, di);
+        kernCompose.SetArg(2, b);
+        kernCompose.SetArg(3, ia);
+        kernCompose.SetArg(4, ja);
+        kernCompose.SetArg(5, di.Length);
+        kernCompose.SetArg(6, x_axis);
+        kernCompose.SetArg(7, x_axis.Length);
+        kernCompose.SetArg(8, y_axis);
+        kernCompose.SetArg(9, y_axis.Length);
 
-        localB[0] = hx * hy / 36 * (4 * f1 + 2 * f2 + 2 * f3 +     f4);
-        localB[1] = hx * hy / 36 * (2 * f1 + 4 * f2 +     f3 + 2 * f4);
-        localB[2] = hx * hy / 36 * (2 * f1 +     f2 + 4 * f3 + 2 * f4);
-        localB[3] = hx * hy / 36 * (    f1 + 2 * f2 + 2 * f3 + 4 * f4);
+        kernCompose.Execute();
 
-        return localB;
+        mat.ReadTo(Slae.Mat);
+        di.ReadTo(Slae.Di);
+        b.ReadTo(Slae.B);
+
+        /* После сборки матрицы надо нулевые диагональные элементы заменить
+            на 1 */
+        for (int i = 0; i < Slae.Di.Length; i++)
+        {
+            if (Slae.Di[i] == 0)
+            {
+                Slae.Di[i] = 1;
+            }
+        }
     }
 }

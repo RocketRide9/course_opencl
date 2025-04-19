@@ -1,3 +1,4 @@
+using System.Numerics;
 using Real = float;
 
 public struct ProblemParams 
@@ -44,15 +45,56 @@ public struct Slae2
     public Real[] B;
     public int[] Ia;
     public int[] Ja;
+
+    void ArraySerialize(Real[] arr, string fileName)
+    {
+        var stream = new StreamWriter(fileName);
+        stream.Write(
+            string.Join(
+                "\n",
+                arr.Select(
+                    e =>
+                    {
+                        var bytes = BitConverter.GetBytes(e);
+                        var i = BitConverter.ToInt64(bytes, 0);
+                        return "0x" + i.ToString("X");
+                    }
+                )
+            )
+        );
+        stream.Close();
+    }
+    
+    void ArraySerialize(int[] arr, string fileName)
+    {
+        var stream = new StreamWriter(fileName);
+        stream.Write(
+            string.Join(
+                "\n",
+                arr
+            )
+        );
+        stream.Close();
+    }
+    
+    public void Serialize()
+    {
+        ArraySerialize(Mat, "mat.txt");
+        ArraySerialize(Di, "di.txt");
+        Console.WriteLine($"{Di[4500]}");
+        ArraySerialize(B, "b.txt");
+        ArraySerialize(Ia, "ia.txt");
+        ArraySerialize(Ja, "ja.txt");
+    }
 }
 
 public struct Slae1
 {
-    public SparkOCL.Array<Real> Mat;
-    public SparkOCL.Array<Real> Di;
-    public SparkOCL.Array<Real> B;
-    public SparkOCL.Array<int> Ia;
-    public SparkOCL.Array<int> Ja;
+    public SparkOCL.DeprecatedArray<Real> Mat;
+    public SparkOCL.DeprecatedArray<Real> Di;
+    public SparkOCL.DeprecatedArray<Real> B;
+    public SparkOCL.DeprecatedArray<int> Ia;
+    public SparkOCL.DeprecatedArray<int> Ja;
 }
 
 public struct ComputationalDomain
