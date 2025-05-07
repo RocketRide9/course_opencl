@@ -1,4 +1,4 @@
-using Real = float;
+using Real = double;
 
 class TaskSquare : TaskFuncs
 {
@@ -74,6 +74,6 @@ class TaskSquare : TaskFuncs
             2 => x + 25,
             _ => throw new ArgumentException("Некорректный номер условия"),
         };
-    }    
+    }
 
 }

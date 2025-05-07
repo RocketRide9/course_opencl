@@ -1,4 +1,4 @@
-using Real = float;
+using Real = double;
 
 class TaskRect4x5x2 : TaskFuncs
 {
@@ -71,5 +71,5 @@ class TaskRect4x5x2 : TaskFuncs
     public Real Ug(int bcNum, Real x, Real y)
     {
         return Answer(bcNum, x, y);
-    }    
+    }
 }

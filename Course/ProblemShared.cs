@@ -1,13 +1,13 @@
 using System.Numerics;
-using Real = float;
+using Real = double;
 
-public struct ProblemParams 
+public struct ProblemParams
 {
     public Real eps { get; set; }
     public int maxIter { get; set; }
 }
 
-public struct Subdomain 
+public struct Subdomain
 {
     // номера подобласти начинаются с 0
     public int Num;
@@ -21,7 +21,7 @@ public struct RefineParams
 {
     public int[] XSplitCount { get; set; }
     public Real[] XStretchRatio { get; set; }
-    
+
     public int[] YSplitCount { get; set; }
     public Real[] YStretchRatio { get; set; }
 }
@@ -64,7 +64,7 @@ public struct Slae2
         );
         stream.Close();
     }
-    
+
     void ArraySerialize(int[] arr, string fileName)
     {
         var stream = new StreamWriter(fileName);
@@ -76,25 +76,16 @@ public struct Slae2
         );
         stream.Close();
     }
-    
+
     public void Serialize()
     {
         ArraySerialize(Mat, "mat.txt");
         ArraySerialize(Di, "di.txt");
-        Console.WriteLine($"{Di[4500]}");
+        // Console.WriteLine($"{Di[4500]}");
         ArraySerialize(B, "b.txt");
         ArraySerialize(Ia, "ia.txt");
         ArraySerialize(Ja, "ja.txt");
     }
-}
-
-public struct Slae1
-{
-    public SparkOCL.DeprecatedArray<Real> Mat;
-    public SparkOCL.DeprecatedArray<Real> Di;
-    public SparkOCL.DeprecatedArray<Real> B;
-    public SparkOCL.DeprecatedArray<int> Ia;
-    public SparkOCL.DeprecatedArray<int> Ja;
 }
 
 public struct ComputationalDomain

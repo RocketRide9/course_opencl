@@ -1,7 +1,7 @@
 using SparkCL;
 using System.Globalization;
 using System.Diagnostics;
-using Real = float;
+using Real = double;
 
 class Course
 {
@@ -10,10 +10,9 @@ class Course
         Core.Init();
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        // SolveAndExportSomeSlae();
-        TestConvergence();
+        SolveAndExportSomeSlae();
+        // TestConvergence();
         // TestHostVSOpenCLOnce();
-
         // TestAtomicAdd();
     }
 
@@ -33,12 +32,12 @@ class Course
 
         Console.WriteLine("This is zero: {0}!", zeroHost[0]);
     }
-    
+
     static void TestHostVSOpenCLOnce()
     {
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../InputRect4x5");
-        
+
         var sw = new Stopwatch();
         { // CSharp pure
             sw.Start();
@@ -48,7 +47,7 @@ class Course
             Console.WriteLine($"{err} {iters} (discrep: {rr})  {sw.ElapsedMilliseconds}мс");
             sw.Reset();
         }
-        return;
+
         { // OpenCL
             sw.Start();
             var (ans, iters, rr) = prob.SolveBiCGStab();
@@ -62,64 +61,113 @@ class Course
             prob.femSlae.MeshDouble();
         }
     }
-    
+
     static void SolveAndExportSomeSlae()
     {
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../InputRect4x5");
-        
+        prob.femSlae.GlobalMatrixImpl = GlobalMatrixImplType.Host;
+
         var sw = new Stopwatch();
         sw.Start();
         var (ans, iters, rr) = prob.SolveBiCGStabPure();
         sw.Stop();
         var err = prob.Lebeg2Err(ans.AsSpan());
-        Console.WriteLine($"{err} {iters} (discrep: {rr})  {sw.ElapsedMilliseconds}мс");
+        Console.WriteLine($"(iters {iters}) (discrep {rr}) (time {sw.ElapsedMilliseconds}ms)");
         sw.Reset();
 
         prob.Serialize();
     }
-    
-    [deprecate]
+
     static void TestConvergence()
     {
-        var sw = new Stopwatch();
+        var sw_bicg = new Stopwatch();
+        var sw_glob = new Stopwatch();
         var task = new TaskRect4x5();
-        
-        for (int g = 0; g < 2; g++)
-        {
-            ProblemLine prob;
-            prob = new ProblemLine(task, "../../../InputRect4x5");
 
-#if false
-            for (int i = 0; i < 5; i++)
+        void _TestBicgOclBatch(ProblemLine prob)
+        {
+            Console.WriteLine("n sw_glob err iters discrep total_time(ms) kerns(ms) pci_io(ms)");
+            for (int i = 0; i < 4; i++)
             {
-                sw.Start();
+                // TODO: подразумевается подсчёт времени, потраченного на сборку матрицы
+                // но считается дробление, которое включает в себя ещё другие операции
+                sw_glob.Start();
+                prob.femSlae.MeshDouble();
+                sw_glob.Stop();
+
+                sw_bicg.Start();
+                Core.ResetTime();
                 var (ans, iters, rr) = prob.SolveBiCGStab();
-                sw.Stop();
+                sw_bicg.Stop();
                 var err = prob.Lebeg2Err(ans.AsSpan());
+
                 var (ioTime, kernTime) = Core.MeasureTime();
                 ioTime /= (ulong)1e+6;
                 kernTime /= (ulong)1e+6;
-                Console.WriteLine($"{err} {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
-                sw.Reset();
-                prob.femSlae.MeshDouble();
+                Console.Write($"{prob.femSlae.Slae.B.Length} {sw_glob.ElapsedMilliseconds} ");
+                Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds} {kernTime} {ioTime}");
+
+                sw_bicg.Reset();
+                sw_glob.Reset();
             }
+        }
+        void _TestBicgHostBatch(ProblemLine prob)
+        {
+            Console.WriteLine("n sw_glob err iters discrep total_time(ms)");
+            for (int i = 0; i < 4; i++)
+            {
+                sw_glob.Start();
+                prob.femSlae.MeshDouble();
+                sw_glob.Stop();
+
+                sw_bicg.Start();
+                var (ans, iters, rr) = prob.SolveBiCGStabPure();
+                sw_bicg.Stop();
+                var err = prob.Lebeg2Err(ans.AsSpan());
+
+                Console.Write($"{prob.femSlae.Slae.B.Length} {sw_glob.ElapsedMilliseconds} ");
+                Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds}");
+
+                sw_bicg.Reset();
+                sw_glob.Reset();
+            }
+        }
+
+        Console.WriteLine("Сборка на хосте: ");
+        for (int g = 0; g < 2; g++)
+        {
+            ProblemLine prob;
+
+            prob = new ProblemLine(task, "../../../InputRect4x5");
+            _TestBicgOclBatch(prob);
+            Console.WriteLine();
+
+#if false
+            prob = new ProblemLine(task, "../../../InputRect4x5");
+            _TestBicgHostBatch(prob);
             Console.WriteLine();
 #endif
-            prob = new ProblemLine(task, "../../../InputRect4x5");
-            for (int i = 0; i < 5; i++)
-            {
-                sw.Start();
-                var (ans, iters, rr) = prob.SolveBiCGStabPure();
-                sw.Stop();
-                var err = prob.Lebeg2Err(ans.AsSpan());
-                Console.WriteLine($"{err} {iters} (discrep: {rr})  {sw.ElapsedMilliseconds}мс");
-                sw.Reset();
-                prob.femSlae.MeshDouble();
-            }
+
             Console.WriteLine();
-            
-            
+        }
+        Console.WriteLine("Сборка на GPU: ");
+        for (int g = 0; g < 2; g++)
+        {
+            ProblemLine prob;
+
+            prob = new ProblemLine(task, "../../../InputRect4x5");
+            prob.femSlae.GlobalMatrixImpl = GlobalMatrixImplType.OpenCL;
+            _TestBicgOclBatch(prob);
+            Console.WriteLine();
+
+#if false
+            prob = new ProblemLine(task, "../../../InputRect4x5");
+            prob.femSlae.GlobalMatrixImpl = GlobalMatrixImplType.OpenCL;
+            _TestBicgHostBatch(prob);
+            Console.WriteLine();
+#endif
+
             Console.WriteLine();
         }
     }

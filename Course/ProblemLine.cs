@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Real = float;
+using Real = double;
 using SparkAlgos;
 
 class ProblemLine {
@@ -8,10 +8,10 @@ class ProblemLine {
     ComputationalDomain computationalDomain;
     BoundaryCondition[] boundaryConditions;
     public FEMSlae femSlae;
-    
+
     int[] XMonitor = [];
     int[] YMonitor = [];
-    
+
     TaskFuncs _funcs;
 
     void Repurpose (TaskFuncs taskFunctions, string taskFolder)
@@ -28,20 +28,20 @@ class ProblemLine {
 
         femSlae = new FEMSlae(mesh, taskFunctions, refineParams);
     }
-    
+
     // folder - директория с условиями задачи
     public ProblemLine(TaskFuncs taskFunctions, string taskFolder)
     {
         var json = File.ReadAllText("ProblemParams.json");
         problemParams = JsonSerializer.Deserialize<ProblemParams>(json)!;
-        
+
         json = File.ReadAllText(Path.Combine(taskFolder, "RefineParams.json"));
         refineParams = JsonSerializer.Deserialize<RefineParams>(json)!;
 
         _funcs = taskFunctions;
         Repurpose(taskFunctions, taskFolder);
     }
-    
+
     // сохранить узлы текущего разбиения как узлы наблюдения
     // void MonitorNodesFix()
     // {
@@ -50,7 +50,7 @@ class ProblemLine {
     //     XMonitor = Enumerable.Range(0, slae.mesh.X.Count).ToArray();
     //     YMonitor = Enumerable.Range(0, slae.mesh.Y.Count).ToArray();
     // }
-    
+
     /* Взятие нормы погрешности в пространстве Лебега 2.
         Интеграл считается методом прямоугольников  */
     public Real Lebeg2Err (Span<Real> q)
@@ -78,14 +78,14 @@ class ProblemLine {
         }
         return (Real)Math.Sqrt(sum);
     }
-    
-    
-    
+
+
+
     public void Serialize()
     {
         femSlae.Slae.Serialize();
     }
-    
+
     public (SparkCL.Accessor<Real> ans, int iters, Real rr) SolveBiCGStab ()
     {
         var x0 = Enumerable.Repeat((Real)0, femSlae.Slae.B.Length).ToArray();
@@ -142,16 +142,16 @@ class ProblemLine {
 
         return (ans, iter, rr);
     }
-    
+
     static ComputationalDomain ReadDomains(string taskFolder)
     {
         var file = new StreamReader(Path.Combine(taskFolder, "ComputationalDomain.txt"));
         ComputationalDomain res;
-        
+
         res.xAxis = file.ReadLine()!.Split().Select(Real.Parse).ToArray();
-        
+
         res.yAxis = file.ReadLine()!.Split().Select(Real.Parse).ToArray();
-        
+
         var domains_num = uint.Parse(file.ReadLine()!.Trim());
         res.subDomains = new Subdomain[domains_num];
         for (int i = 0; i < domains_num; i++)
@@ -173,10 +173,10 @@ class ProblemLine {
     static BoundaryCondition[] ReadConditions(string taskFolder)
     {
         var file = new StreamReader(Path.Combine(taskFolder, "BoundaryConditions.txt"));
-        
+
         var condsNum = uint.Parse(file.ReadLine()!.Trim());
         var res = new BoundaryCondition[condsNum];
-        
+
         for (int i = 0; i < condsNum; i++)
         {
             var numbers = file.ReadLine()!.Trim().Split().Select(int.Parse).ToArray();
@@ -190,7 +190,7 @@ class ProblemLine {
                 Y2 = numbers[5] - 1,
             };
         }
-        
+
         return res;
     }
 }

@@ -1,6 +1,6 @@
 {
-  "XSplitCount": [32],
+  "XSplitCount": [512],
   "XStretchRatio": [1.0],
-  "YSplitCount": [32],
+  "YSplitCount": [512],
   "YStretchRatio": [1.0]
 }

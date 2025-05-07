@@ -1,9 +1,10 @@
-#define HOST_PARALLEL
+// #define HOST_PARALLEL
 
-// using Quasar.Native;
 using Quasar.Native;
 using SparkAlgos;
-using Real = float;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using Real = double;
 
 public class BiCGStabPure
 {
@@ -16,7 +17,7 @@ public class BiCGStabPure
     int _maxIter;
     Real _eps;
     Real[] _x;
-    
+
     Real[] r;
     Real[] di_inv;
     Real[] y;
@@ -29,7 +30,7 @@ public class BiCGStabPure
     Real[] h;
     Real[] s;
     Real[] t;
-    
+
     public BiCGStabPure(
         Real[] Mat,
         Real[] Di,
@@ -44,14 +45,14 @@ public class BiCGStabPure
         _maxIter = maxIter;
         _eps = eps;
 
-        _mat = Mat; 
-        _di = Di; 
-        _b = B; 
-        _ia = Ia; 
-        _ja = Ja; 
+        _mat = Mat;
+        _di = Di;
+        _b = B;
+        _ia = Ia;
+        _ja = Ja;
 
         _x = x0;
-        
+
         var zeros = Enumerable.Repeat((Real)0, _b.Length).ToArray();
         r       = [.. zeros];
         r_hat   = [.. zeros];
@@ -67,6 +68,26 @@ public class BiCGStabPure
         kt      = [.. zeros];
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void MyFor(int i0, int i1, Action<int> iteration)
+    {
+#if HOST_PARALLEL
+        var partitioner = System.Collections.Concurrent.Partitioner.Create(i0, i1);
+        Parallel.ForEach(partitioner, (range, state) =>
+        {
+            for (int i = range.Item1; i < range.Item2; i++)
+            {
+                iteration(i);
+            }
+        });
+#else
+        for (int i = i0; i < i1; i++)
+        {
+            iteration(i);
+        }        
+#endif
+    }
+    
     // y *= x
     static void Vmul(Real[] y, Real[] x)
     {
@@ -74,25 +95,18 @@ public class BiCGStabPure
         {
             throw new ArgumentException("Vectors must have the same length");
         }
-        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, y.Length);
-        Parallel.ForEach(partitioner, (range, state) =>
+
+        MyFor(0, y.Length, (i) =>
         {
-            for (int i = range.Item1; i < range.Item2; i++)
-            {
-                y[i] *= x[i];
-            }
+            y[i] *= x[i];
         });
     }
     // y = y*(-1/2)
     static void Rsqrt(Real[] y)
     {
-        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, y.Length);
-        Parallel.ForEach(partitioner, (range, state) =>
+        MyFor(0, y.Length, (i) =>
         {
-            for (int i = range.Item1; i < range.Item2; i++)
-            {
-                y[i] = (Real)(1 / Math.Sqrt(y[i]));
-            }
+            y[i] = (Real)(1 / Math.Sqrt(y[i]));
         });
     }
     // y += alpha*x
@@ -105,13 +119,9 @@ public class BiCGStabPure
         // BLAS.axpy(x.Length, alpha, x.AsSpan(), y.AsSpan());
         // return;
 
-        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, y.Length);
-        Parallel.ForEach(partitioner, (range, state) =>
+        MyFor(0, y.Length, (i) =>
         {
-            for (int i = range.Item1; i < range.Item2; i++)
-            {
-                y[i] += (Real)(alpha * x[i]);
-            }
+            y[i] += (Real)(alpha * x[i]);
         });
     }
     // x·y
@@ -135,16 +145,13 @@ public class BiCGStabPure
     {
         // BLAS.scal(y.Length, alpha, y.AsSpan());
         // return;
-        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, y.Length);
-        Parallel.ForEach(partitioner, (range, state) =>
+        
+        MyFor(0, y.Length, (i) =>
         {
-            for (int i = range.Item1; i < range.Item2; i++)
-            {
-                y[i] *= alpha;
-            }
+            y[i] *= alpha;
         });
     }
-    
+
     public static void MSRMul(
         Real[] mat,
         Real[] di,
@@ -154,23 +161,19 @@ public class BiCGStabPure
         Real[] v,
         Real[] res)
     {
-        var partitioner = System.Collections.Concurrent.Partitioner.Create(0, n);
-        Parallel.ForEach(partitioner, (range, state) =>
+        MyFor(0, res.Length, (i) =>
         {
-            for (int i = range.Item1; i < range.Item2; i++)
+            int start = ia[i];
+            int stop = ia[i + 1];
+            Real dot = di[i] * v[i];
+            for (int a = start; a < stop; a++)
             {
-                int start = ia[i];
-                int stop = ia[i + 1];
-                Real dot = di[i] * v[i];
-                for (int a = start; a < stop; a++)
-                {
-                    dot += mat[a] * v[ja[a]];
-                }
-                res[i] = dot;
+                dot += mat[a] * v[ja[a]];
             }
+            res[i] = dot;
         });
     }
-    
+
     public (Real[] ans, Real rr, Real pp, int iter) Solve()
     {
         // precond
@@ -187,7 +190,7 @@ public class BiCGStabPure
         Real pp = Dot(r, r); // r_hat * r
         // 4.
         r.CopyTo(p, 0);
-        
+
         int iter = 0;
         Real rr;
         for (; iter < _maxIter; iter++)
@@ -199,7 +202,7 @@ public class BiCGStabPure
 
             // 2.
             MSRMul(_mat, _di, _ia, _ja, _x.Length, y, nu);
-            
+
             // 3.
             Real rnu = Dot(r_hat, nu);
             Real alpha = pp / rnu;
@@ -208,7 +211,7 @@ public class BiCGStabPure
             _x.CopyTo(h, 0);
             Axpy(alpha, y, h);
             // BLAS.axpy(_x.Length, alpha, y.AsSpan(), h.AsSpan());
-            
+
             // 5.
             r.CopyTo(s, 0);
             Axpy(-alpha, nu, s);
@@ -223,7 +226,7 @@ public class BiCGStabPure
                 // _x = h;
                 break;
             }
-            
+
             // 7.
             s.CopyTo(ks, 0);
             Vmul(ks, di_inv);
@@ -236,7 +239,7 @@ public class BiCGStabPure
             // 9.
             t.CopyTo(kt, 0);
             Vmul(kt, di_inv);
-            
+
             Real ts = Dot(ks, kt);
             Real tt = Dot(kt, kt);
             Real w = ts / tt;
@@ -257,11 +260,11 @@ public class BiCGStabPure
             {
                 break;
             }
-            
+
             // 13-14
             Real pp1 = Dot(r, r_hat);
             Real beta = (pp1 / pp) * (alpha / w);
-            
+
             // 15.
             Axpy(-w, nu, p);
             // BLAS.axpy(_x.Length, -w, nu.AsSpan(), p.AsSpan());
@@ -281,7 +284,7 @@ public class BiCGStabPure
 
         return (_x, rr, pp, iter);
     }
-    
+
     #if false
     public void SolveAndBreakdown()
     {

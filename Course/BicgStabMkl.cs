@@ -1,6 +1,6 @@
 #define HOST_PARALLEL
 
-using Real = float;
+using Real = double;
 using Quasar.Native;
 
 public class BiCGStabMkl
@@ -14,7 +14,7 @@ public class BiCGStabMkl
     int _maxIter;
     Real _eps;
     Real[] _x;
-    
+
     Real[] r;
     Real[] di_inv;
     Real[] y;
@@ -27,7 +27,7 @@ public class BiCGStabMkl
     Real[] h;
     Real[] s;
     Real[] t;
-    
+
     public BiCGStabMkl(
         Real[] Mat,
         Real[] Di,
@@ -42,14 +42,14 @@ public class BiCGStabMkl
         _maxIter = maxIter;
         _eps = eps;
 
-        _mat = Mat; 
-        _di = Di; 
-        _b = B; 
-        _ia = Ia; 
-        _ja = Ja; 
+        _mat = Mat;
+        _di = Di;
+        _b = B;
+        _ia = Ia;
+        _ja = Ja;
 
         _x = x0;
-        
+
         var zeros = Enumerable.Repeat((Real)0, _b.Length).ToArray();
         r       = [.. zeros];
         r_hat   = [.. zeros];
@@ -89,7 +89,7 @@ public class BiCGStabMkl
             }
         });
     }
-    
+
     public (Real[] ans, Real rr, Real pp, int iter) Solve()
     {
         // precond
@@ -105,7 +105,7 @@ public class BiCGStabMkl
         Real pp = (Real)BLAS.dot(_x.Length, r.AsSpan(), r.AsSpan()); // r_hat * r
         // 4.
         r.CopyTo(p, 0);
-        
+
         int iter = 0;
         Real rr;
         for (; iter < _maxIter; iter++)
@@ -117,7 +117,7 @@ public class BiCGStabMkl
 
             // 2.
             MSRMul(_mat, _di, _ia, _ja, _x.Length, y, nu);
-            
+
             // 3.
             Real rnu = (Real)BLAS.dot(_x.Length, r_hat.AsSpan(), nu.AsSpan());
             Real alpha = pp / rnu;
@@ -125,7 +125,7 @@ public class BiCGStabMkl
             // 4.
             _x.CopyTo(h, 0);
             BLAS.axpy(_x.Length, alpha, y.AsSpan(), h.AsSpan());
-            
+
             // 5.
             r.CopyTo(s, 0);
             BLAS.axpy(_x.Length, -alpha, nu.AsSpan(), s.AsSpan());
@@ -139,7 +139,7 @@ public class BiCGStabMkl
                 // _x = h;
                 break;
             }
-            
+
             // 7.
             s.CopyTo(ks, 0);
             Vmul(ks, di_inv);
@@ -152,7 +152,7 @@ public class BiCGStabMkl
             // 9.
             t.CopyTo(kt, 0);
             Vmul(kt, di_inv);
-            
+
             Real ts = (Real)BLAS.dot(_x.Length, ks.AsSpan(), kt.AsSpan());
             Real tt = (Real)BLAS.dot(_x.Length, kt.AsSpan(), kt.AsSpan());
             Real w = ts / tt;
@@ -171,11 +171,11 @@ public class BiCGStabMkl
             {
                 break;
             }
-            
+
             // 13-14
             Real pp1 = (Real)BLAS.dot(_x.Length, r.AsSpan(), r_hat.AsSpan());
             Real beta = (pp1 / pp) * (alpha / w);
-            
+
             // 15.
             BLAS.axpy(_x.Length, -w, nu.AsSpan(), p.AsSpan());
             BLAS.scal(_x.Length, beta, p.AsSpan());
@@ -191,7 +191,7 @@ public class BiCGStabMkl
 
         return (_x, rr, pp, iter);
     }
-    
+
     #if false
     public void SolveAndBreakdown()
     {
@@ -219,7 +219,7 @@ public class BiCGStabMkl
         Console.WriteLine($"Вычисления на хосте: {sw_host.ElapsedMilliseconds}мс");
     }
     #endif
-    
+
     public static void MSRMul(
         Real[] mat,
         Real[] di,

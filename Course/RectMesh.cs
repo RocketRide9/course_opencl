@@ -1,4 +1,4 @@
-using Real = float;
+using Real = double;
 
 public class RectMesh
 {
@@ -7,17 +7,17 @@ public class RectMesh
 
     BoundaryCondition[] _boundaryConditions;
     public BoundaryCondition[] BoundaryConditions { get => _boundaryConditions; }
-    
+
     RefineParams? _refineParams;
     public RefineParams? RefineParams { get => _refineParams; }
-    
+
     public Real[] Xw;
     public Real[] Yw;
     public Real[] X { get; private set; }
     public Real[] Y { get; private set; }
     public int[] IXw { get; private set; }
     public int[] IYw { get; private set; }
-    
+
     public int nodesCount;
     public int feCount;
 
@@ -66,7 +66,7 @@ public class RectMesh
 
         return gap / sum;
     }
-    
+
     public void Refine(RefineParams refineParams)
     {
         _refineParams = refineParams;
@@ -75,17 +75,17 @@ public class RectMesh
             var xLength = _refineParams.Value.XSplitCount.Sum() + 1;
             IXw = new int[Xw.Length];
             X = new Real[xLength];
-    
+
             IXw[0] = 0;
             X[0] = Xw[0];
             int xCount = 1;
             for (int i = 1; i < Xw.Length; i++)
             {
                 Real gap = Xw[i] - Xw[i - 1];
-                
+
                 int seg_count = _refineParams.Value.XSplitCount[i - 1];
                 Real stretch = _refineParams.Value.XStretchRatio[i - 1];
-                
+
                 var step = FirstStepSize(stretch, seg_count, gap);
                 var step_n = step;
                 var stretch_n = stretch;
@@ -107,21 +107,21 @@ public class RectMesh
                 xCount++;
             }
         }
-        
+
         { // ось Y
             var yLength = _refineParams.Value.YSplitCount.Sum() + 1;
             IYw = new int[Yw.Length];
             Y = new Real[yLength];
             IYw[0] = 0;
             Y[0] = Yw[0];
-            int yCount = 1;        
+            int yCount = 1;
             for (int i = 1; i < Yw.Length; i++)
             {
                 Real gap = Yw[i] - Yw[i - 1];
-                
+
                 int seg_count = _refineParams.Value.YSplitCount[i - 1];
                 Real stretch = _refineParams.Value.YStretchRatio[i - 1];
-                
+
                 var step = FirstStepSize(stretch, seg_count, gap);
                 var step_n = step;
                 var stretch_n = stretch;
@@ -143,7 +143,7 @@ public class RectMesh
                 yCount++;
             }
         }
-        
+
         nodesCount = X.Length * Y.Length;
         feCount = (X.Length - 1) * (Y.Length - 1);
     }

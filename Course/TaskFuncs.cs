@@ -1,6 +1,6 @@
-using Real = float;
+using Real = double;
 
-interface TaskFuncs 
+interface TaskFuncs
 {
     string Description { get; }
 
