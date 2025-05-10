@@ -3,14 +3,17 @@ using System.Globalization;
 using System.Diagnostics;
 using Real = double;
 
+using BenchmarkDotNet.Running;
+
 class Course
 {
     static void Main(string[] args)
     {
-        Core.Init();
+        // Core.Init();
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        SolveAndExportSomeSlae();
+        var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BicgStabPure).Assembly).RunAll();
+        // SolveAndExportSomeSlae();
         // TestConvergence();
         // TestHostVSOpenCLOnce();
         // TestAtomicAdd();
