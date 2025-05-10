@@ -37,6 +37,76 @@ public class RectMesh
         IYw = Enumerable.Range(0, Y.Length).ToArray();
     }
 
+    public int? GetSubdomNumAtElCoords (int x1, int y1)
+    {
+        foreach (var a in SubDomains)
+        {
+            if (x1 >= IXw[a.X1] && x1 < IXw[a.X2] &&
+                y1 >= IYw[a.Y1] && y1 < IYw[a.Y2]
+            ) {
+                return a.Num;
+            }
+        }
+
+        return null;
+    }
+
+    public int? GetSubdomNumAtPoint (Real x1, Real y1)
+    {
+        foreach (var a in SubDomains)
+        {
+            if (x1 >= Xw[a.X1] && x1 <= Xw[a.X2] &&
+                y1 >= Yw[a.Y1] && y1 <= Yw[a.Y2]
+            ) {
+                return a.Num;
+            }
+        }
+
+        return null;
+    }
+
+    public (int xi, int yi) GetElCoordsAtPoint(Real x, Real y)
+    {
+        int xi = -1;
+        int yi = -1;
+        for (int i = 0; i < X.Length; i++)
+        {
+            if (X[i] <= x && x <= X[i+1])
+            {
+                xi = i;
+                break;
+            }
+        }
+
+        for (int i = 0; i < Y.Length; i++)
+        {
+            if (Y[i] <= y && y <= Y[i+1])
+            {
+                yi = i;
+                break;
+            }
+        }
+
+        if (xi < 0 || yi < 0)
+        {
+            throw new Exception("Bad");
+        }
+        return (xi, yi);
+    }
+
+    /* Перевод координаты x до разбития в координату после разбития расчётной
+        области */
+    public int XAfterGridInit (int x)
+    {
+        return IXw[x];
+    }
+
+    /* См. выше */
+    public int YAfterGridInit (int y)
+    {
+        return IYw[y];
+    }
+
     public void RefineDiv2()
     {
         var rparams = RefineParams.Value;

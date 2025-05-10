@@ -3,43 +3,113 @@ using Real = double;
 using SparkAlgos;
 
 class ProblemLine {
-    ProblemParams problemParams;
-    RefineParams refineParams;
-    ComputationalDomain computationalDomain;
-    BoundaryCondition[] boundaryConditions;
-    public FEMSlae femSlae;
+    ProblemParams _problemParams;
+    RefineParams _refineParams;
+    RectMesh _mesh;
+    ComputationalDomain _computationalDomain;
+    BoundaryCondition[] _boundaryConditions;
+
+    public Slae2 femSlae;
+    public FEMSlaeBuilder slaeBuilder;
 
     int[] XMonitor = [];
     int[] YMonitor = [];
 
     TaskFuncs _funcs;
 
-    void Repurpose (TaskFuncs taskFunctions, string taskFolder)
-    {
-        computationalDomain = ReadDomains(taskFolder);
-        boundaryConditions = ReadConditions(taskFolder);
+    // void Repurpose (TaskFuncs taskFunctions, string taskFolder)
+    // {
+    //     computationalDomain = ReadDomains(taskFolder);
+    //     boundaryConditions = ReadConditions(taskFolder);
 
-        var mesh = new RectMesh(
-            computationalDomain.xAxis,
-            computationalDomain.yAxis,
-            computationalDomain.subDomains,
-            boundaryConditions
-        );
+    //     var mesh = new RectMesh(
+    //         computationalDomain.xAxis,
+    //         computationalDomain.yAxis,
+    //         computationalDomain.subDomains,
+    //         boundaryConditions
+    //     );
 
-        femSlae = new FEMSlae(mesh, taskFunctions, refineParams);
-    }
+    //     femSlae = new FEMSlae(mesh, taskFunctions, refineParams);
+    // }
 
     // folder - директория с условиями задачи
     public ProblemLine(TaskFuncs taskFunctions, string taskFolder)
     {
+        _funcs = taskFunctions;
+
         var json = File.ReadAllText("ProblemParams.json");
-        problemParams = JsonSerializer.Deserialize<ProblemParams>(json)!;
+        _problemParams = JsonSerializer.Deserialize<ProblemParams>(json)!;
 
         json = File.ReadAllText(Path.Combine(taskFolder, "RefineParams.json"));
-        refineParams = JsonSerializer.Deserialize<RefineParams>(json)!;
+        _refineParams = JsonSerializer.Deserialize<RefineParams>(json)!;
 
-        _funcs = taskFunctions;
-        Repurpose(taskFunctions, taskFolder);
+        _computationalDomain = ReadDomains(taskFolder);
+        _boundaryConditions = ReadConditions(taskFolder);
+
+        _mesh = new RectMesh(
+            _computationalDomain.xAxis,
+            _computationalDomain.yAxis,
+            _computationalDomain.subDomains,
+            _boundaryConditions
+        );
+
+        _mesh.Refine(_refineParams);
+
+        slaeBuilder = new FEMSlaeBuilder(_mesh, taskFunctions);
+        femSlae = slaeBuilder.Build();
+    }
+
+    void MeshRefine(RefineParams refineParams)
+    {
+        _mesh.Refine(refineParams);
+    }
+
+    public void MeshDouble()
+    {
+        _mesh.RefineDiv2();
+    }
+
+
+    public Real AnswerAt (Real x, Real y)
+    {
+        var num = _mesh.GetSubdomNumAtPoint(x, y);
+        if (num.HasValue)
+        {
+            return _funcs.Answer(num.Value, x, y);
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    public Real ResultAt(Span<Real> q, Real x, Real y)
+    {
+        var X = _mesh.X;
+        var Y = _mesh.Y;
+        Real result = 0;
+
+        var (xi, yi) = _mesh.GetElCoordsAtPoint(x, y);
+
+        Real hx = X[xi + 1] - X[xi];
+        Real hy = Y[yi + 1] - Y[yi];
+
+        var subdom = _mesh.GetSubdomNumAtElCoords(xi, yi);
+        if (subdom.HasValue)
+        {
+            Span<int> m = stackalloc int[4];
+            m[0] = yi * X.Length + xi;
+            m[1] = m[0] + 1;
+            m[2] = (yi + 1) * X.Length + xi;
+            m[3] = m[2] + 1;
+
+            result =
+            ( q[m[0]] * (X[xi + 1] - x) * (Y[yi + 1] - y)
+            + q[m[1]] * (x - X[xi])     * (Y[yi + 1] - y)
+            + q[m[2]] * (X[xi + 1] - x) * (y - Y[yi])
+            + q[m[3]] * (x - X[xi])     * (y - Y[yi])) /hx/hy;
+        }
+        return result;
     }
 
     // сохранить узлы текущего разбиения как узлы наблюдения
@@ -55,7 +125,7 @@ class ProblemLine {
         Интеграл считается методом прямоугольников  */
     public Real Lebeg2Err (Span<Real> q)
     {
-        var mesh = femSlae.Mesh;
+        var mesh = _mesh;
         Real sum = 0;
         for (int yi = 0; yi < mesh.Y.Length - 1; yi++)
         {
@@ -65,12 +135,12 @@ class ProblemLine {
                 Real y0 = mesh.Y[yi];
                 Real hx = mesh.X[xi + 1] - x0;
                 Real hy = mesh.Y[yi + 1] - y0;
-                var subdom = femSlae.GetSubdomNumAtElCoords(xi, yi);
+                var subdom = _mesh.GetSubdomNumAtElCoords(xi, yi);
 
                 if (subdom.HasValue)
                 {
-                    Real u = femSlae.ResultAt(q, (Real)(x0 + hx / 2d), (Real)(y0 + hy / 2d));
-                    Real u_true = femSlae.AnswerAt((Real)(x0 + hx / 2d), (Real)(y0 + hy / 2d));
+                    Real u = ResultAt(q, (Real)(x0 + hx / 2d), (Real)(y0 + hy / 2d));
+                    Real u_true = AnswerAt((Real)(x0 + hx / 2d), (Real)(y0 + hy / 2d));
                     Real func = u_true - u;
                     sum += hx * hy * func * func;
                 }
@@ -79,17 +149,12 @@ class ProblemLine {
         return (Real)Math.Sqrt(sum);
     }
 
-
-
-    public void Serialize()
-    {
-        femSlae.Slae.Serialize();
-    }
+    public void Serialize() => femSlae.Serialize();
 
     public (SparkCL.Accessor<Real> ans, int iters, Real rr) SolveBiCGStab ()
     {
-        var x0 = Enumerable.Repeat((Real)0, femSlae.Slae.B.Length).ToArray();
-        var slae = femSlae.Slae;
+        var x0 = Enumerable.Repeat((Real)0, femSlae.B.Length).ToArray();
+        var slae = femSlae;
         var solver = new BicgStab(
             slae.Mat,
             slae.Di,
@@ -97,8 +162,8 @@ class ProblemLine {
             slae.Ia,
             slae.Ja,
             x0,
-            problemParams.maxIter,
-            problemParams.eps
+            _problemParams.maxIter,
+            _problemParams.eps
         );
         var (ans, rr, _, iter) = solver.Solve();
 
@@ -107,8 +172,8 @@ class ProblemLine {
 
     public (Real[] ans, int iters, Real rr) SolveBiCGStabMkl ()
     {
-        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.Slae.B.Length)];
-        var slae = femSlae.Slae;
+        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.B.Length)];
+        var slae = femSlae;
         var solver = new BiCGStabMkl(
             slae.Mat,
             slae.Di,
@@ -116,8 +181,8 @@ class ProblemLine {
             slae.Ia,
             slae.Ja,
             x0,
-            problemParams.maxIter,
-            problemParams.eps
+            _problemParams.maxIter,
+            _problemParams.eps
         );
         var (ans, rr, _, iter) = solver.Solve();
 
@@ -126,21 +191,15 @@ class ProblemLine {
 
     public (Real[] ans, int iters, Real rr) SolveBiCGStabPure ()
     {
-        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.Slae.B.Length)];
-        var slae = femSlae.Slae;
+        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.B.Length)];
         var solver = new BiCGStabPure(
-            slae.Mat,
-            slae.Di,
-            slae.B,
-            slae.Ia,
-            slae.Ja,
-            x0,
-            problemParams.maxIter,
-            problemParams.eps
+            _problemParams.maxIter,
+            _problemParams.eps
         );
-        var (ans, rr, _, iter) = solver.Solve();
+        
+        var (rr, _, iter) = solver.Solve(femSlae, x0);
 
-        return (ans, iter, rr);
+        return (x0, iter, rr);
     }
 
     static ComputationalDomain ReadDomains(string taskFolder)

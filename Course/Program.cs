@@ -58,7 +58,7 @@ class Course
             kernTime /= (ulong)1e+6;
             Console.WriteLine($"{err} {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
             sw.Reset();
-            prob.femSlae.MeshDouble();
+            prob.MeshDouble();
         }
     }
 
@@ -66,7 +66,7 @@ class Course
     {
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../InputRect4x5");
-        prob.femSlae.GlobalMatrixImpl = GlobalMatrixImplType.Host;
+        prob.slaeBuilder.GlobalMatrixImpl = GlobalMatrixImplType.Host;
 
         var sw = new Stopwatch();
         sw.Start();
@@ -93,7 +93,7 @@ class Course
                 // TODO: подразумевается подсчёт времени, потраченного на сборку матрицы
                 // но считается дробление, которое включает в себя ещё другие операции
                 sw_glob.Start();
-                prob.femSlae.MeshDouble();
+                prob.MeshDouble();
                 sw_glob.Stop();
 
                 sw_bicg.Start();
@@ -105,7 +105,7 @@ class Course
                 var (ioTime, kernTime) = Core.MeasureTime();
                 ioTime /= (ulong)1e+6;
                 kernTime /= (ulong)1e+6;
-                Console.Write($"{prob.femSlae.Slae.B.Length} {sw_glob.ElapsedMilliseconds} ");
+                Console.Write($"{prob.femSlae.B.Length} {sw_glob.ElapsedMilliseconds} ");
                 Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds} {kernTime} {ioTime}");
 
                 sw_bicg.Reset();
@@ -118,7 +118,7 @@ class Course
             for (int i = 0; i < 4; i++)
             {
                 sw_glob.Start();
-                prob.femSlae.MeshDouble();
+                prob.MeshDouble();
                 sw_glob.Stop();
 
                 sw_bicg.Start();
@@ -126,7 +126,7 @@ class Course
                 sw_bicg.Stop();
                 var err = prob.Lebeg2Err(ans.AsSpan());
 
-                Console.Write($"{prob.femSlae.Slae.B.Length} {sw_glob.ElapsedMilliseconds} ");
+                Console.Write($"{prob.femSlae.B.Length} {sw_glob.ElapsedMilliseconds} ");
                 Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds}");
 
                 sw_bicg.Reset();
@@ -157,7 +157,7 @@ class Course
             ProblemLine prob;
 
             prob = new ProblemLine(task, "../../../InputRect4x5");
-            prob.femSlae.GlobalMatrixImpl = GlobalMatrixImplType.OpenCL;
+            prob.slaeBuilder.GlobalMatrixImpl = GlobalMatrixImplType.OpenCL;
             _TestBicgOclBatch(prob);
             Console.WriteLine();
 

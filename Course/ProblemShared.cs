@@ -38,6 +38,15 @@ public struct BoundaryCondition
     public int Y2;
 }
 
+public ref struct SlaeRef
+{
+    public Span<Real> Mat;
+    public Span<Real> Di;
+    public Span<Real> B;
+    public Span<int> Ia;
+    public Span<int> Ja;
+}
+
 public struct Slae2
 {
     public Real[] Mat;
@@ -46,7 +55,15 @@ public struct Slae2
     public int[] Ia;
     public int[] Ja;
 
-    void ArraySerialize(Real[] arr, string fileName)
+    public SlaeRef AsRef() => new() {
+        Mat = Mat,
+        Di = Di,
+        B = B,
+        Ia = Ia,
+        Ja = Ja,
+    };
+
+    static void ArraySerialize(Real[] arr, string fileName)
     {
         var stream = new StreamWriter(fileName);
         stream.Write(
@@ -65,7 +82,7 @@ public struct Slae2
         stream.Close();
     }
 
-    void ArraySerialize(int[] arr, string fileName)
+    static void ArraySerialize(int[] arr, string fileName)
     {
         var stream = new StreamWriter(fileName);
         stream.Write(
