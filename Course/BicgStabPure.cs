@@ -68,7 +68,7 @@ public class BiCGStabPure
 //     }
     
     // y *= x
-    static void Vmul(Real[] y, Real[] x)
+    static void Vmul(Span<Real> y, ReadOnlySpan<Real> x)
     {
         if (x.Length != y.Length)
         {
@@ -85,7 +85,7 @@ public class BiCGStabPure
         // });
     }
     // y = y*(-1/2)
-    static void Rsqrt(Real[] y)
+    static void Rsqrt(Span<Real> y)
     {
         for (int i = 0; i < y.Length; i++)
         {
@@ -97,7 +97,7 @@ public class BiCGStabPure
         // });
     }
     // y += alpha*x
-    static void Axpy(Real alpha, Real[] x, Real[] y)
+    static void Axpy(Real alpha, ReadOnlySpan<Real> x, Span<Real> y)
     {
         if (x.Length != y.Length)
         {
@@ -113,7 +113,7 @@ public class BiCGStabPure
         #endif
     }
     // x·y
-    static Real Dot(Real[] x, Real[] y)
+    static Real Dot(ReadOnlySpan<Real> x, ReadOnlySpan<Real> y)
     {
         if (x.Length != y.Length)
         {
@@ -131,7 +131,7 @@ public class BiCGStabPure
         #endif
     }
     // y_i = alpha * y[i]
-    static void Scale(Real alpha, Real[] y)
+    static void Scale(Real alpha, Span<Real> y)
     {
         #if USE_BLAS
             BLAS.scal(y.Length, alpha, y);
@@ -144,13 +144,13 @@ public class BiCGStabPure
     }
 
     public static void MSRMul(
-        Real[] mat,
-        Real[] di,
-        int[] ia,
-        int[] ja,
+        ReadOnlySpan<Real> mat,
+        ReadOnlySpan<Real> di,
+        Span<int> ia,
+        Span<int> ja,
         int n,
-        Real[] v,
-        Real[] res)
+        ReadOnlySpan<Real> v,
+        Span<Real> res)
     {
         for (int i = 0; i < ia.Length - 1; i++)
         {
@@ -166,7 +166,7 @@ public class BiCGStabPure
     }
 
     // x используется как начальное приближение, туда же попадёт ответ
-    public (Real rr, Real pp, int iter) Solve(Slae2 slae, Real[] x)
+    public (Real rr, Real pp, int iter) Solve(Slae2 slae, Span<Real> x)
     {
         if (x.Length != _n)
         {
@@ -224,7 +224,7 @@ public class BiCGStabPure
             Real alpha = pp / rnu;
 
             // 4.
-            x.CopyTo(h, 0);
+            x.CopyTo(h);
             Axpy(alpha, y, h);
             // BLAS.axpy(_n, alpha, y, h);
 
@@ -237,7 +237,7 @@ public class BiCGStabPure
             Real ss = Dot(s, s);
             if (ss < _eps)
             {
-                h.CopyTo(x, 0);
+                h.CopyTo(x);
                 // _x.Dispose();
                 // _x = h;
                 break;
@@ -261,7 +261,7 @@ public class BiCGStabPure
             Real w = ts / tt;
 
             // 10.
-            h.CopyTo(x, 0);
+            h.CopyTo(x);
             Axpy(w, z, x);
             // BLAS.axpy(_n, w, z, _x);
 
