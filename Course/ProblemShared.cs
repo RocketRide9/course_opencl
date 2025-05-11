@@ -1,5 +1,14 @@
-using System.Numerics;
 using Real = double;
+
+using System.Numerics;
+using System.Text.Json.Serialization;
+
+[JsonSerializable(typeof(ProblemParams))]
+[JsonSerializable(typeof(Real))]
+[JsonSerializable(typeof(int))]        
+internal partial class ProblemParamsSourceGenerationContext : JsonSerializerContext
+{
+}
 
 public struct ProblemParams
 {
@@ -15,6 +24,13 @@ public struct Subdomain
     public int X2;
     public int Y1;
     public int Y2;
+}
+
+[JsonSerializable(typeof(RefineParams))]
+[JsonSerializable(typeof(int[]))]
+[JsonSerializable(typeof(Real[]))]        
+internal partial class RefineParamsSourceGenerationContext : JsonSerializerContext
+{
 }
 
 public struct RefineParams

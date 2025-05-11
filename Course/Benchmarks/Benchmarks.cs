@@ -22,6 +22,7 @@ public class BicgStabPure
     [GlobalSetup]
     public void Setup()
     {
+        // TODO: preallocate tmp arrays
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var task = new TaskRect4x5();
         prob = new ProblemLine(task, "../../../../../../../InputRect4x5");

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Real = double;
 using SparkAlgos;
+using System.Text.Unicode;
 
 class ProblemLine {
     ProblemParams _problemParams;
@@ -37,11 +38,23 @@ class ProblemLine {
     {
         _funcs = taskFunctions;
 
+        var options = new JsonSerializerOptions()
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Create(UnicodeRanges.All),
+            TypeInfoResolver = ProblemParamsSourceGenerationContext.Default
+        };
+        
         var json = File.ReadAllText("ProblemParams.json");
-        _problemParams = JsonSerializer.Deserialize<ProblemParams>(json)!;
+        _problemParams = JsonSerializer.Deserialize<ProblemParams>(json, options)!;
+
+        options = new JsonSerializerOptions()
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Create(UnicodeRanges.All),
+            TypeInfoResolver = RefineParamsSourceGenerationContext.Default
+        };
 
         json = File.ReadAllText(Path.Combine(taskFolder, "RefineParams.json"));
-        _refineParams = JsonSerializer.Deserialize<RefineParams>(json)!;
+        _refineParams = JsonSerializer.Deserialize<RefineParams>(json, options)!;
 
         _computationalDomain = ReadDomains(taskFolder);
         _boundaryConditions = ReadConditions(taskFolder);
