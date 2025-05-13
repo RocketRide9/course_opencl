@@ -12,7 +12,7 @@
     <ProjectReference Include="../SparkCL/SparkCL.csproj" />
     <ProjectReference Include="../SparkAlgos/SparkAlgos.csproj" />
     <PackageReference Include="TelmaQuasar.Native.Int" Version="2.0.0" />
-    <PackageReference Include="BenchmarkDotNet" Version="0.14.1-nightly.20250503.223" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
   </ItemGroup>    
 
   <ItemGroup>

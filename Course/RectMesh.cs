@@ -35,6 +35,9 @@ public class RectMesh
         IXw = Enumerable.Range(0, X.Length).ToArray();
         IYw = Enumerable.Range(0, Y.Length).ToArray();
 
+        nodesCount = X.Length * Y.Length;
+        feCount = (X.Length - 1) * (Y.Length - 1);
+        
         _refineParams = new()
         {
             XSplitCount = Enumerable.Repeat(1, X.Length - 1).ToArray(),

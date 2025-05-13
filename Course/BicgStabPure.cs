@@ -146,8 +146,8 @@ public class BiCGStabPure
     public static void MSRMul(
         ReadOnlySpan<Real> mat,
         ReadOnlySpan<Real> di,
-        Span<int> ia,
-        Span<int> ja,
+        ReadOnlySpan<int> ia,
+        ReadOnlySpan<int> ja,
         int n,
         ReadOnlySpan<Real> v,
         Span<Real> res)
@@ -165,12 +165,13 @@ public class BiCGStabPure
         }
     }
 
-    // x используется как начальное приближение, туда же попадёт ответ
-    public (Real rr, Real pp, int iter) Solve(Slae2 slae, Span<Real> x)
+    // Выделить память для временных массивов
+    // n - длина каждого массива
+    public void AllocateTemps(int n)
     {
-        if (x.Length != _n)
+        if (n != _n)
         {
-            _n = x.Length;
+            _n = n;
 
             r       = new Real[_n];
             r_hat   = new Real[_n];
@@ -185,6 +186,12 @@ public class BiCGStabPure
             ks      = new Real[_n];
             kt      = new Real[_n];
         }
+    }
+
+    // x используется как начальное приближение, туда же попадёт ответ
+    public (Real rr, Real pp, int iter) Solve(SlaeRef slae, Real[] x)
+    {
+        AllocateTemps(x.Length);
 
         var _mat = slae.Mat;
         var _di  = slae.Di;
@@ -192,27 +199,41 @@ public class BiCGStabPure
         var _ia  = slae.Ia;
         var _ja  = slae.Ja;
 
+        var r       = this.r     .AsSpan();
+        var r_hat   = this.r_hat .AsSpan();
+        var p       = this.p     .AsSpan();
+        var nu      = this.nu    .AsSpan();
+        var h       = this.h     .AsSpan();
+        var s       = this.s     .AsSpan();
+        var t       = this.t     .AsSpan();
+        var di_inv  = this.di_inv.AsSpan();
+        var y       = this.y     .AsSpan();
+        var z       = this.z     .AsSpan();
+        var ks      = this.ks    .AsSpan();
+        var kt      = this.kt    .AsSpan();
+        
+        
         // precond
-        _di.CopyTo(di_inv, 0);
+        _di.CopyTo(di_inv);
         Rsqrt(di_inv);
         // 1.
         MSRMul(_mat, _di, _ia, _ja, _n, x, t);
-        _b.CopyTo(r, 0);
+        _b.CopyTo(r);
         Axpy(-1, t, r);
         // BLAS.axpy(_n, -1, t, r);
         // 2.
-        r.CopyTo(r_hat, 0);
+        r.CopyTo(r_hat);
         // 3.
         Real pp = Dot(r, r); // r_hat * r
         // 4.
-        r.CopyTo(p, 0);
+        r.CopyTo(p);
 
         int iter = 0;
         Real rr;
         for (; iter < _maxIter; iter++)
         {
             // 1.
-            p.CopyTo(y, 0);
+            p.CopyTo(y);
             Vmul(y, di_inv);
             Vmul(y, di_inv);
 
@@ -229,7 +250,7 @@ public class BiCGStabPure
             // BLAS.axpy(_n, alpha, y, h);
 
             // 5.
-            r.CopyTo(s, 0);
+            r.CopyTo(s);
             Axpy(-alpha, nu, s);
             // BLAS.axpy(_n, -alpha, nu, s);
 
@@ -244,16 +265,16 @@ public class BiCGStabPure
             }
 
             // 7.
-            s.CopyTo(ks, 0);
+            s.CopyTo(ks);
             Vmul(ks, di_inv);
-            ks.CopyTo(z, 0);
+            ks.CopyTo(z);
             Vmul(z, di_inv);
 
             // 8.
             MSRMul(_mat, _di, _ia, _ja, _n, z, t);
 
             // 9.
-            t.CopyTo(kt, 0);
+            t.CopyTo(kt);
             Vmul(kt, di_inv);
 
             Real ts = Dot(ks, kt);
@@ -266,7 +287,7 @@ public class BiCGStabPure
             // BLAS.axpy(_n, w, z, _x);
 
             // 11.
-            s.CopyTo(r, 0);
+            s.CopyTo(r);
             Axpy(-w, t, r);
             // BLAS.axpy(_n, -w, t, r);
 
@@ -293,7 +314,7 @@ public class BiCGStabPure
         }
 
         MSRMul(_mat, _di, _ia, _ja, _n, x, t);
-        _b.CopyTo(r, 0);
+        _b.CopyTo(r);
         Axpy(-1, t, r);
         // BLAS.axpy(_x.Length, -1, t, r);
         rr = Dot(r, r);

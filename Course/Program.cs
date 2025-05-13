@@ -12,8 +12,9 @@ class Course
         // Core.Init();
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-        // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BicgStabPure).Assembly).RunAll();
-        SolveAndExportSomeSlae();
+        var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchMsrMul).Assembly).RunAll();
+        // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchBicgStabPure).Assembly).RunAll();
+        // SolveAndExportSomeSlae();
         // TestConvergence();
         // TestHostVSOpenCLOnce();
         // TestAtomicAdd();

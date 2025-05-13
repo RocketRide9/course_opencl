@@ -2,9 +2,11 @@ using System.Text.Json;
 using Real = double;
 using SparkAlgos;
 using System.Text.Unicode;
+using System.Dynamic;
 
 class ProblemLine {
     ProblemParams _problemParams;
+    public ProblemParams ProblemParams { get => _problemParams; }
     RefineParams _refineParams;
     RectMesh _mesh;
     ComputationalDomain _computationalDomain;
@@ -209,8 +211,8 @@ class ProblemLine {
             _problemParams.maxIter,
             _problemParams.eps
         );
-        
-        var (rr, _, iter) = solver.Solve(femSlae, x0);
+        solver.AllocateTemps(x0.Length);
+        var (rr, _, iter) = solver.Solve(femSlae.AsRef(), x0);
 
         return (x0, iter, rr);
     }
