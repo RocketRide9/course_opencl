@@ -116,6 +116,31 @@ public class BenchMsrMul
         }
     }
     
+    static void MSRMulSpansSlice(
+        ReadOnlySpan<Real> mat,
+        ReadOnlySpan<Real> di,
+        ReadOnlySpan<int> ia,
+        ReadOnlySpan<int> ja,
+        int n,
+        ReadOnlySpan<Real> v,
+        Span<Real> res)
+    {
+        for (int i = 0; i < ia.Length - 1; i++)
+        {
+            int start = ia[i];
+            int stop = ia[i + 1];
+            var len = stop - start;
+            Real dot = di[i] * v[i];
+            var row = mat.Slice(start, len);
+            var jarow = ja.Slice(start, len);
+            for (int a = 0; a < len; a++)
+            {
+                dot += row[a] * v[jarow[a]];
+            }
+            res[i] = dot;
+        }
+    }
+    
     
     [Benchmark(Baseline = true)]
     public void Array() => MSRMulArrays(
@@ -150,6 +175,18 @@ public class BenchMsrMul
         res
     );
     
+    [Benchmark]
+    public void SpanSlice() => MSRMulSpansSlice(
+        slae.Mat,
+        slae.Di,
+        slae.Ia,
+        slae.Ja,
+        slae.Di.Length,
+        x0,
+        res
+    );
+    
+
     [GlobalSetup]
     public void Setup()
     {
