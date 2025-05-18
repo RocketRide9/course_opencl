@@ -1,10 +1,9 @@
-// #define HOST_PARALLEL
+#define HOST_PARALLEL
 #define USE_BLAS
 
 using Quasar.Native;
 using SparkAlgos;
 using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
 using Real = double;
 
 public class BiCGStabPure
@@ -47,55 +46,62 @@ public class BiCGStabPure
         t =      [];
     }
 
-//     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-//     public static void MyFor(int i0, int i1, Action<int> iteration)
-//     {
-// #if HOST_PARALLEL
-//         var partitioner = System.Collections.Concurrent.Partitioner.Create(i0, i1);
-//         Parallel.ForEach(partitioner, (range, state) =>
-//         {
-//             for (int i = range.Item1; i < range.Item2; i++)
-//             {
-//                 iteration(i);
-//             }
-//         });
-// #else
-//         for (int i = i0; i < i1; i++)
-//         {
-//             iteration(i);
-//         }        
-// #endif
-//     }
-    
     // y *= x
-    static void Vmul(Span<Real> y, ReadOnlySpan<Real> x)
+    static unsafe void Vmul(Span<Real> y, ReadOnlySpan<Real> x)
     {
         if (x.Length != y.Length)
         {
             throw new ArgumentException("Vectors must have the same length");
         }
+#if HOST_PARALLEL
+        var partitioner = Partitioner.Create(0, y.Length);
+        fixed(Real* _p_y = y)
+        fixed(Real* _p_x = x)
+        {
+            var p_y = _p_y;
+            var p_x = _p_x;
+            Parallel.ForEach(partitioner, (range, state) =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    p_y[i] *= p_x[i];
+                }
+            });
 
+        }
+#else
         for (int i = 0; i < y.Length; i++)
         {
             y[i] *= x[i];
         }
-        // MyFor(0, y.Length, (i) =>
-        // {
-        //     y[i] *= x[i];
-        // });
+#endif
     }
+
     // y = y*(-1/2)
-    static void Rsqrt(Span<Real> y)
+    static unsafe void Rsqrt(Span<Real> y)
     {
+#if HOST_PARALLEL
+        var partitioner = Partitioner.Create(0, y.Length);
+        fixed(Real* _p_y = y)
+        {
+            var p_y = _p_y;
+            Parallel.ForEach(partitioner, (range, state) =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    p_y[i] = (Real)(1 / Math.Sqrt(p_y[i]));
+                }
+            });
+
+        }
+#else
         for (int i = 0; i < y.Length; i++)
         {
             y[i] = (Real)(1 / Math.Sqrt(y[i]));
         }
-        // MyFor(0, y.Length, (i) =>
-        // {
-        //     y[i] = (Real)(1 / Math.Sqrt(y[i]));
-        // });
+#endif
     }
+
     // y += alpha*x
     static void Axpy(Real alpha, ReadOnlySpan<Real> x, Span<Real> y)
     {
@@ -143,7 +149,7 @@ public class BiCGStabPure
         #endif
     }
 
-    public static void MSRMul(
+    public static unsafe void MSRMul(
         ReadOnlySpan<Real> mat,
         ReadOnlySpan<Real> di,
         ReadOnlySpan<int> ia,
@@ -152,17 +158,55 @@ public class BiCGStabPure
         ReadOnlySpan<Real> v,
         Span<Real> res)
     {
+#if HOST_PARALLEL
+        var partitioner = Partitioner.Create(0, ia.Length);
+        fixed(Real* _p_mat = mat)
+        fixed(Real* _p_di = di)
+        fixed(int* _p_ia = ia)
+        fixed(int* _p_ja = ja)
+        fixed(Real* _p_v = v)
+        fixed(Real* _p_res = res)
+        {
+            var p_mat = _p_mat;
+            var p_di = _p_di;
+            var p_ia = _p_ia;
+            var p_ja = _p_ja;
+            var p_v = _p_v;
+            var p_res = _p_res;
+            Parallel.ForEach(partitioner, (range, state) =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    int start = p_ia[i];
+                    int stop = p_ia[i + 1];
+                    Real dot = p_di[i] * p_v[i];
+                    for (int a = start; a < stop; a++)
+                    {
+                        dot += p_mat[a] * p_v[p_ja[a]];
+                    }
+                    p_res[i] = dot;
+                }
+            });
+        }
+#else
+        fixed(Real* p_mat = mat)
+        fixed(Real* p_di = di)
+        fixed(int* p_ia = ia)
+        fixed(int* p_ja = ja)
+        fixed(Real* p_v = v)
+        fixed(Real* p_res = res)
         for (int i = 0; i < ia.Length - 1; i++)
         {
-            int start = ia[i];
-            int stop = ia[i + 1];
-            Real dot = di[i] * v[i];
+            int start = p_ia[i];
+            int stop = p_ia[i + 1];
+            Real dot = p_di[i] * p_v[i];
             for (int a = start; a < stop; a++)
             {
-                dot += mat[a] * v[ja[a]];
+                dot += p_mat[a] * p_v[p_ja[a]];
             }
-            res[i] = dot;
+            p_res[i] = dot;
         }
+#endif
     }
 
     // Выделить память для временных массивов
@@ -189,7 +233,7 @@ public class BiCGStabPure
     }
 
     // x используется как начальное приближение, туда же попадёт ответ
-    public (Real rr, Real pp, int iter) Solve(SlaeRef slae, Real[] x)
+    public (Real rr, Real pp, int iter) Solve(SlaeRef slae, Span<Real> x)
     {
         AllocateTemps(x.Length);
 

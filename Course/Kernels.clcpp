@@ -120,8 +120,8 @@ kernel void global_matrix_compose(
 
     if (xi >= xn - 1 || yi >= yn - 1) return;
 
-    // изменить позже
-    int subDom = 1;
+    // TODO: изменить позже
+    int subDom = 0;
 
     private int m[4];
     m[0] = yi * xn + xi;
@@ -203,4 +203,259 @@ kernel void global_matrix_compose(
         atomicAdd_g(&b[m[i]], localB[i]);
         // b[m[i]] += localB[i];
     }
+}
+
+int qfind(global const int *where, int start, int end, int what)
+{
+    int beg = start;
+    while (beg < end)
+    {
+        int mid = (beg + end) / 2;
+        if (what > where[mid])
+        {
+            beg = mid + 1;
+        }
+        else
+        {
+            end = mid;
+        }
+    }
+
+    return beg; 
+}
+
+real __attribute__((always_inline)) 
+get_l_avg (
+    int dom,
+    real x0, real y0,
+    real x1, real y1
+) {
+    real res = lambda(dom, x0, y0)
+             + lambda(dom, x1, y0)
+             + lambda(dom, x0, y1)
+             + lambda(dom, x1, y1);
+
+    return res / 4;
+}
+
+real __attribute__((always_inline))
+get_g_avg (
+    int dom,
+    real x0, real y0,
+    real x1, real y1
+) {
+    real res = gamma(dom, x0, y0)
+             + gamma(dom, x1, y0)
+             + gamma(dom, x0, y1)
+             + gamma(dom, x1, y1);
+
+    return res / 4;
+}
+
+kernel void global_matrix_compose_v2(
+    // матрица
+    global real *mat,
+    global real *di,
+    global real *b,
+    global const int *ia,
+    global const int *ja,
+    const int n,
+    // сетка
+    global const real *axis_x,
+    const int xn,
+    global const real *axis_y,
+    const int yn
+) {
+    int xi = get_global_id(0);
+    int yi = get_global_id(1);
+
+    if (xi >= xn || yi >= yn) return;
+
+    int targetNode = yi * xn + xi;
+    // TODO: основано на нескольких предположениях об области решения
+    int dom1 = (xi-1 >= 0  && yi-1 >= 0 ) ? 0 : -1;
+    int dom2 = (xi+1 <  xn && yi-1 >= 0 ) ? 0 : -1;
+    int dom3 = (xi-1 >= 0  && yi+1 <  yn) ? 0 : -1;
+    int dom4 = (xi+1 <  xn && yi+1 <  yn) ? 0 : -1;
+
+    // printf("xi, yi = %d, %d\n", xi, yi);
+    // printf("xn, yn = %d, %d\n", xn, yn);
+    // printf("dom = %d, %d, %d, %d\n", dom1, dom2, dom3, dom4);
+
+    // номера текущего узла и соседних с ним сверху и снизу 
+    // в порядке снизу вверх
+    // могут выходить за пределы нумерации
+    int r[3];
+    r[1] = targetNode;
+    r[0] = r[1] - xn;
+    r[2] = r[1] + xn;
+
+    // номера этих узлов в строке матрицы, относящейся к текущему узлу
+    int mr[3] = {-1, -1, -1};
+    int beg = ia[targetNode];
+    int bound = ia[targetNode + 1] - 1;
+    if (r[0] >= 0)
+    {
+        mr[0] = qfind(ja, beg, bound, r[0]);
+        beg = mr[0];
+    }
+    // else оставить -1, так как узел вышел за пределы матрицы
+
+    if (r[1] % xn == 0)
+    {
+        mr[1] = qfind(ja, beg, bound, r[1]+1) - 1;
+    }
+    else
+    {
+        mr[1] = qfind(ja, beg, bound, r[1]-1);
+    }
+
+    if (r[2] < n)
+    {
+        mr[2] = qfind(ja, beg, bound, r[2]);
+    }
+    
+    // printf("mr = %d, %d, %d\n", mr[0], mr[1], mr[2]);
+    
+
+    // return;
+    real mc11 = 0;
+    real mc12 = 0;
+    real mc13 = 0;
+
+    real mc21 = 0;
+    real mc22 = 0;
+    real mc23 = 0;
+
+    real mc31 = 0;
+    real mc32 = 0;
+    real mc33 = 0;
+
+    real bc = 0;
+
+    if (dom1 != -1)
+    {
+        real x0 = axis_x[xi-1];
+        real x1 = axis_x[xi];
+        real y0 = axis_y[yi-1];
+        real y1 = axis_y[yi];
+        real l_avg = get_l_avg(dom1, x0, y0, x1, y1);
+        real g_avg = get_g_avg(dom1, x0, y0, x1, y1);
+        real hx0 = x1 - x0;
+        real hy0 = y1 - y0;
+
+        mc11 += l_avg / 6 * (hy0 / hx0 * localG1[3][0] + hx0 / hy0 * localG2[3][0])
+            + g_avg / 36 * hx0 * hy0 * localM[3][0];
+        mc12 += l_avg / 6 * (hy0 / hx0 * localG1[3][1] + hx0 / hy0 * localG2[3][1])
+            + g_avg / 36 * hx0 * hy0 * localM[3][1];
+        mc21 += l_avg / 6 * (hy0 / hx0 * localG1[3][2] + hx0 / hy0 * localG2[3][2])
+            + g_avg / 36 * hx0 * hy0 * localM[3][2];
+        mc22 += l_avg / 6 * (hy0 / hx0 * localG1[3][3] + hx0 / hy0 * localG2[3][3])
+            + g_avg / 36 * hx0 * hy0 * localM[3][3];
+
+        real f1 = f(dom1, x0, y0);
+        real f2 = f(dom1, x1, y0);
+        real f3 = f(dom1, x0, y1);
+        real f4 = f(dom1, x1, y1);
+
+        bc += hx0 * hy0 / 36 * (f1 + 2 * f2 + 2 * f3 + 4 * f4);
+    }
+
+    if (dom2 != -1)
+    {
+        real x0 = axis_x[xi];
+        real x1 = axis_x[xi+1];
+        real y0 = axis_y[yi-1];
+        real y1 = axis_y[yi];
+        real l_avg = get_l_avg(dom2, x0, y0, x1, y1);
+        real g_avg = get_g_avg(dom2, x0, y0, x1, y1);
+        real hx1 = x1 - x0;
+        real hy0 = y1 - y0;
+
+        mc12 += l_avg / 6 * (hy0 / hx1 * localG1[2][0] + hx1 / hy0 * localG2[2][0])
+            + g_avg / 36 * hx1 * hy0 * localM[2][0];
+        mc13 += l_avg / 6 * (hy0 / hx1 * localG1[2][1] + hx1 / hy0 * localG2[2][1])
+            + g_avg / 36 * hx1 * hy0 * localM[2][1];
+        mc22 += l_avg / 6 * (hy0 / hx1 * localG1[2][2] + hx1 / hy0 * localG2[2][2])
+            + g_avg / 36 * hx1 * hy0 * localM[2][2];
+        mc23 += l_avg / 6 * (hy0 / hx1 * localG1[2][3] + hx1 / hy0 * localG2[2][3])
+            + g_avg / 36 * hx1 * hy0 * localM[2][3];
+
+        real f1 = f(dom2, x0, y0);
+        real f2 = f(dom2, x1, y0);
+        real f3 = f(dom2, x0, y1);
+        real f4 = f(dom2, x1, y1);
+
+        bc += hx1 * hy0 / 36 * (2 * f1 + f2 + 4 * f3 + 2 * f4);
+    }
+
+    if (dom3 != -1)
+    {
+        real x0 = axis_x[xi-1];
+        real x1 = axis_x[xi];
+        real y0 = axis_y[yi];
+        real y1 = axis_y[yi+1];
+        real l_avg = get_l_avg(dom3, x0, y0, x1, y1);
+        real g_avg = get_g_avg(dom3, x0, y0, x1, y1);
+        real hx0 = x1 - x0;
+        real hy1 = y1 - y0;
+
+        mc21 += l_avg / 6 * (hy1 / hx0 * localG1[1][0] + hx0 / hy1 * localG2[1][0])
+            + g_avg / 36 * hx0 * hy1 * localM[1][0];
+        mc22 += l_avg / 6 * (hy1 / hx0 * localG1[1][1] + hx0 / hy1 * localG2[1][1])
+            + g_avg / 36 * hx0 * hy1 * localM[1][1];
+        mc31 += l_avg / 6 * (hy1 / hx0 * localG1[1][2] + hx0 / hy1 * localG2[1][2])
+            + g_avg / 36 * hx0 * hy1 * localM[1][2];
+        mc32 += l_avg / 6 * (hy1 / hx0 * localG1[1][3] + hx0 / hy1 * localG2[1][3])
+            + g_avg / 36 * hx0 * hy1 * localM[1][3];
+
+        real f1 = f(dom3, x0, y0);
+        real f2 = f(dom3, x1, y0);
+        real f3 = f(dom3, x0, y1);
+        real f4 = f(dom3, x1, y1);
+
+        bc += hx0 * hy1 / 36 * (2 * f1 + 4 * f2 + f3 + 2 * f4);
+    }
+
+    if (dom4 != -1)
+    {
+        real x0 = axis_x[xi];
+        real x1 = axis_x[xi+1];
+        real y0 = axis_y[yi];
+        real y1 = axis_y[yi+1];
+        real l_avg = get_l_avg(dom4, x0, y0, x1, y1);
+        real g_avg = get_g_avg(dom4, x0, y0, x1, y1);
+        real hy1 = x1 - x0;
+        real hx1 = y1 - y0;
+
+        mc22 += l_avg / 6 * (hy1 / hx1 * localG1[0][0] + hx1 / hy1 * localG2[0][0])
+            + g_avg / 36 * hx1 * hy1 * localM[0][0];
+        mc23 += l_avg / 6 * (hy1 / hx1 * localG1[0][1] + hx1 / hy1 * localG2[0][1])
+            + g_avg / 36 * hx1 * hy1 * localM[0][1];
+        mc32 += l_avg / 6 * (hy1 / hx1 * localG1[0][2] + hx1 / hy1 * localG2[0][2])
+            + g_avg / 36 * hx1 * hy1 * localM[0][2];
+        mc33 += l_avg / 6 * (hy1 / hx1 * localG1[0][3] + hx1 / hy1 * localG2[0][3])
+            + g_avg / 36 * hx1 * hy1 * localM[0][3];
+
+        real f1 = f(dom4, x0, y0);
+        real f2 = f(dom4, x1, y0);
+        real f3 = f(dom4, x0, y1);
+        real f4 = f(dom4, x1, y1);
+
+        bc += hx1 * hy1 / 36 * (4 * f1 + 2 * f2 + 2 * f3 + f4);
+    }
+
+    di[targetNode] += mc22;
+    b[targetNode] += bc;
+
+    mat[mr[0]-1] += mc11;
+    mat[mr[0]]   += mc12;
+    mat[mr[0]+1] += mc13;
+
+    mat[mr[1]]   += mc21;
+    mat[mr[1]+1] += mc23;
+
+    mat[mr[2]-1] += mc31;
+    mat[mr[2]]   += mc32;
+    mat[mr[2]+1] += mc33;
 }

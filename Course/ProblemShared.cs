@@ -54,15 +54,6 @@ public struct BoundaryCondition
     public int Y2;
 }
 
-public ref struct SlaeRef
-{
-    public Span<Real> Mat;
-    public Span<Real> Di;
-    public Span<Real> B;
-    public Span<int> Ia;
-    public Span<int> Ja;
-}
-
 public struct Slae2
 {
     public Real[] Mat;
@@ -71,7 +62,7 @@ public struct Slae2
     public int[] Ia;
     public int[] Ja;
 
-    public SlaeRef AsRef() => new() {
+    public SparkAlgos.SlaeRef AsRef() => new() {
         Mat = Mat,
         Di = Di,
         B = B,

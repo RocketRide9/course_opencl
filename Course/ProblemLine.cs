@@ -5,6 +5,7 @@ using System.Text.Unicode;
 using System.Dynamic;
 
 class ProblemLine {
+    TaskFuncs _funcs;
     ProblemParams _problemParams;
     public ProblemParams ProblemParams { get => _problemParams; }
     RefineParams _refineParams;
@@ -13,12 +14,7 @@ class ProblemLine {
     BoundaryCondition[] _boundaryConditions;
 
     public Slae2 femSlae;
-    public FEMSlaeBuilder slaeBuilder;
-
-    int[] XMonitor = [];
-    int[] YMonitor = [];
-
-    TaskFuncs _funcs;
+    public GlobalMatrixImplType buildType;
 
     // void Repurpose (TaskFuncs taskFunctions, string taskFolder)
     // {
@@ -36,7 +32,7 @@ class ProblemLine {
     // }
 
     // folder - директория с условиями задачи
-    public ProblemLine(TaskFuncs taskFunctions, string taskFolder)
+    public ProblemLine(TaskFuncs taskFunctions, string taskFolder, GlobalMatrixImplType buildType = GlobalMatrixImplType.Host)
     {
         _funcs = taskFunctions;
 
@@ -70,18 +66,30 @@ class ProblemLine {
 
         _mesh.Refine(_refineParams);
 
-        slaeBuilder = new FEMSlaeBuilder(_mesh, taskFunctions);
+        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
+        slaeBuilder.GlobalMatrixImpl = buildType;
+        femSlae = slaeBuilder.Build();
+    }
+    
+    public void Rebuild()
+    {
+        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
+        slaeBuilder.GlobalMatrixImpl = buildType;
         femSlae = slaeBuilder.Build();
     }
 
     void MeshRefine(RefineParams refineParams)
     {
         _mesh.Refine(refineParams);
+        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
+        femSlae = slaeBuilder.Build();
     }
 
     public void MeshDouble()
     {
         _mesh.RefineDiv2();
+        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
+        femSlae = slaeBuilder.Build();
     }
 
 
@@ -166,23 +174,17 @@ class ProblemLine {
 
     public void Serialize() => femSlae.Serialize();
 
-    public (SparkCL.Accessor<Real> ans, int iters, Real rr) SolveBiCGStab ()
+    public (Real[] ans, int iters, Real rr) SolveBiCGStab ()
     {
         var x0 = Enumerable.Repeat((Real)0, femSlae.B.Length).ToArray();
-        var slae = femSlae;
         var solver = new BicgStab(
-            slae.Mat,
-            slae.Di,
-            slae.B,
-            slae.Ia,
-            slae.Ja,
-            x0,
             _problemParams.maxIter,
             _problemParams.eps
         );
-        var (ans, rr, _, iter) = solver.Solve();
+        solver.AllocateTemps(x0.Length);
+        var (rr, _, iter) = solver.Solve(femSlae.AsRef(), x0);
 
-        return (ans, iter, rr);
+        return (x0, iter, rr);
     }
 
     public (Real[] ans, int iters, Real rr) SolveBiCGStabMkl ()

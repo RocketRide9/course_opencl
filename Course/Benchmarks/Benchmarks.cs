@@ -71,6 +71,34 @@ public class BenchMsrMul
             res[i] = dot;
         }
     }
+
+    static unsafe void MSRMulSpansUnsafe(
+        ReadOnlySpan<Real> mat,
+        ReadOnlySpan<Real> di,
+        ReadOnlySpan<int> ia,
+        ReadOnlySpan<int> ja,
+        int n,
+        ReadOnlySpan<Real> v,
+        Span<Real> res)
+    {
+        fixed(Real* p_mat = mat)
+        fixed(Real* p_di = di)
+        fixed(int* p_ia = ia)
+        fixed(int* p_ja = ja)
+        fixed(Real* p_v = v)
+        fixed(Real* p_res = res)
+        for (int i = 0; i < ia.Length - 1; i++)
+        {
+            int start = p_ia[i];
+            int stop = p_ia[i + 1];
+            Real dot = p_di[i] * p_v[i];
+            for (int a = start; a < stop; a++)
+            {
+                dot += p_mat[a] * p_v[p_ja[a]];
+            }
+            p_res[i] = dot;
+        }
+    }
     
     static void MSRMulHybrid(
         Real[] mat,
@@ -177,6 +205,17 @@ public class BenchMsrMul
     
     [Benchmark]
     public void SpanSlice() => MSRMulSpansSlice(
+        slae.Mat,
+        slae.Di,
+        slae.Ia,
+        slae.Ja,
+        slae.Di.Length,
+        x0,
+        res
+    );
+
+    [Benchmark]
+    public void SpanUnsafe() => MSRMulSpansUnsafe(
         slae.Mat,
         slae.Di,
         slae.Ia,
