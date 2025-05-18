@@ -425,8 +425,8 @@ kernel void global_matrix_compose_v2(
         real y1 = axis_y[yi+1];
         real l_avg = get_l_avg(dom4, x0, y0, x1, y1);
         real g_avg = get_g_avg(dom4, x0, y0, x1, y1);
-        real hy1 = x1 - x0;
-        real hx1 = y1 - y0;
+        real hx1 = x1 - x0;
+        real hy1 = y1 - y0;
 
         mc22 += l_avg / 6 * (hy1 / hx1 * localG1[0][0] + hx1 / hy1 * localG2[0][0])
             + g_avg / 36 * hx1 * hy1 * localM[0][0];

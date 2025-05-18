@@ -381,22 +381,22 @@ class FEMSlaeBuilder
 
     void GlobalMatrixBuildImplHostV2 ()
     {
-        Real GetGammaAverage (int dom, int x0, int y0)
+        Real GetGammaAverage (int dom, Real x0, Real y0, Real x1, Real y1)
         {
-            Real res = _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0])
-                       + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
-                       + _funcs.Gamma(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
-                       + _funcs.Gamma(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
+            Real res = _funcs.Gamma(dom, x0, y0)
+                       + _funcs.Gamma(dom, x1, y0)
+                       + _funcs.Gamma(dom, x0, y1)
+                       + _funcs.Gamma(dom, x1, y1);
 
             return res / 4;
         }
 
-        Real GetLamdaAverage (int dom, int x0, int y0)
+        Real GetLamdaAverage (int dom, Real x0, Real y0, Real x1, Real y1)
         {
-            Real res = _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0])
-                       + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0])
-                       + _funcs.Lambda(dom, _mesh.X[x0], _mesh.Y[y0 + 1])
-                       + _funcs.Lambda(dom, _mesh.X[x0 + 1], _mesh.Y[y0 + 1]);
+            Real res = _funcs.Lambda(dom, x0, y0)
+                       + _funcs.Lambda(dom, x1, y0)
+                       + _funcs.Lambda(dom, x0, y1)
+                       + _funcs.Lambda(dom, x1, y1);
 
             return res / 4;
         }
@@ -474,12 +474,30 @@ class FEMSlaeBuilder
                 // Console.WriteLine("xi, yi = {0}, {1}", xi, yi);
                 // Console.WriteLine("dom = {0}, {1}, {2}, {3}", dom1, dom2, dom3, dom4);
 
+                Real mc11 = 0;
+                Real mc12 = 0;
+                Real mc13 = 0;
+
+                Real mc21 = 0;
+                Real mc22 = 0;
+                Real mc23 = 0;
+
+                Real mc31 = 0;
+                Real mc32 = 0;
+                Real mc33 = 0;
+
+                Real bc = 0;
+
                 if (dom1.HasValue)
                 {
-                    var l_avg = GetLamdaAverage(dom1.Value, xi - 1, yi - 1);
-                    var g_avg = GetGammaAverage(dom1.Value, xi - 1, yi - 1);
-                    var hx0 = _mesh.X[xi] - _mesh.X[xi - 1];
-                    var hy0 = _mesh.Y[yi] - _mesh.Y[yi - 1];
+                    var x0 = _mesh.X[xi-1];
+                    var x1 = _mesh.X[xi];
+                    var y0 = _mesh.Y[yi-1];
+                    var y1 = _mesh.Y[yi];
+                    var l_avg = GetLamdaAverage(dom1.Value, x0, y0, x1, y1);
+                    var g_avg = GetGammaAverage(dom1.Value, x0, y0, x1, y1);
+                    var hx0 = x1 - x0;
+                    var hy0 = y1 - y0;
 
                     _slae.Mat[mr[0] - 1] += l_avg / 6 * (hy0 / hx0 * _localG1[3, 0] + hx0 / hy0 * _localG2[3, 0])
                         + g_avg / 36 * hx0 * hy0 * _localM[3, 0];
@@ -490,10 +508,6 @@ class FEMSlaeBuilder
                     _slae.Di[targetNode] += l_avg / 6 * (hy0 / hx0 * _localG1[3, 3] + hx0 / hy0 * _localG2[3, 3])
                         + g_avg / 36 * hx0 * hy0 * _localM[3, 3];
 
-                    var x0 = _mesh.X[xi-1];
-                    var x1 = _mesh.X[xi];
-                    var y0 = _mesh.Y[yi-1];
-                    var y1 = _mesh.Y[yi];
                     Real f1 = _funcs.F(dom1.Value, x0, y0);
                     Real f2 = _funcs.F(dom1.Value, x1, y0);
                     Real f3 = _funcs.F(dom1.Value, x0, y1);
@@ -506,10 +520,14 @@ class FEMSlaeBuilder
 
                 if (dom2.HasValue)
                 {
-                    var l_avg = GetLamdaAverage(dom2.Value, xi, yi - 1);
-                    var g_avg = GetGammaAverage(dom2.Value, xi, yi - 1);
-                    var hx1 = _mesh.X[xi + 1] - _mesh.X[xi];
-                    var hy0 = _mesh.Y[yi] - _mesh.Y[yi - 1];
+                    var x0 = _mesh.X[xi];
+                    var x1 = _mesh.X[xi+1];
+                    var y0 = _mesh.Y[yi-1];
+                    var y1 = _mesh.Y[yi];
+                    var l_avg = GetLamdaAverage(dom2.Value, x0, y0, x1, y1);
+                    var g_avg = GetGammaAverage(dom2.Value, x0, y0, x1, y1);
+                    var hx1 = x1 - x0;
+                    var hy0 = y1 - y0;
 
                     _slae.Mat[mr[0]] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 0] + hx1 / hy0 * _localG2[2, 0])
                         + g_avg / 36 * hx1 * hy0 * _localM[2, 0];
@@ -520,10 +538,6 @@ class FEMSlaeBuilder
                     _slae.Mat[mr[1] + 1] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 3] + hx1 / hy0 * _localG2[2, 3])
                         + g_avg / 36 * hx1 * hy0 * _localM[2, 3];
 
-                    var x0 = _mesh.X[xi];
-                    var x1 = _mesh.X[xi+1];
-                    var y0 = _mesh.Y[yi-1];
-                    var y1 = _mesh.Y[yi];
                     Real f1 = _funcs.F(dom2.Value, x0, y0);
                     Real f2 = _funcs.F(dom2.Value, x1, y0);
                     Real f3 = _funcs.F(dom2.Value, x0, y1);
@@ -534,10 +548,14 @@ class FEMSlaeBuilder
 
                 if (dom3.HasValue)
                 {
-                    var l_avg = GetLamdaAverage(dom3.Value, xi - 1, yi);
-                    var g_avg = GetGammaAverage(dom3.Value, xi - 1, yi);
-                    var hx0 = _mesh.X[xi] - _mesh.X[xi - 1];
-                    var hy1 = _mesh.Y[yi + 1] - _mesh.Y[yi];
+                    var x0 = _mesh.X[xi-1];
+                    var x1 = _mesh.X[xi];
+                    var y0 = _mesh.Y[yi];
+                    var y1 = _mesh.Y[yi+1];
+                    var l_avg = GetLamdaAverage(dom3.Value, x0, y0, x1, y1);
+                    var g_avg = GetGammaAverage(dom3.Value, x0, y0, x1, y1);
+                    var hx0 = x1 - x0;
+                    var hy1 = y1 - y0;
 
                     _slae.Mat[mr[1]] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 0] + hx0 / hy1 * _localG2[1, 0])
                         + g_avg / 36 * hx0 * hy1 * _localM[1, 0];
@@ -548,10 +566,6 @@ class FEMSlaeBuilder
                     _slae.Mat[mr[2]] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 3] + hx0 / hy1 * _localG2[1, 3])
                         + g_avg / 36 * hx0 * hy1 * _localM[1, 3];
 
-                    var x0 = _mesh.X[xi-1];
-                    var x1 = _mesh.X[xi];
-                    var y0 = _mesh.Y[yi];
-                    var y1 = _mesh.Y[yi+1];
                     Real f1 = _funcs.F(dom3.Value, x0, y0);
                     Real f2 = _funcs.F(dom3.Value, x1, y0);
                     Real f3 = _funcs.F(dom3.Value, x0, y1);
@@ -562,10 +576,14 @@ class FEMSlaeBuilder
 
                 if (dom4.HasValue)
                 {
-                    var l_avg = GetLamdaAverage(dom4.Value, xi, yi);
-                    var g_avg = GetGammaAverage(dom4.Value, xi, yi);
-                    var hy1 = _mesh.Y[yi + 1] - _mesh.Y[yi];
-                    var hx1 = _mesh.X[xi + 1] - _mesh.X[xi];
+                    var x0 = _mesh.X[xi];
+                    var x1 = _mesh.X[xi+1];
+                    var y0 = _mesh.Y[yi];
+                    var y1 = _mesh.Y[yi+1];
+                    var l_avg = GetLamdaAverage(dom4.Value, x0, y0, x1, y1);
+                    var g_avg = GetGammaAverage(dom4.Value, x0, y0, x1, y1);
+                    var hx1 = x1 - x0;
+                    var hy1 = y1 - y0;
 
                     _slae.Di[targetNode] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 0] + hx1 / hy1 * _localG2[0, 0])
                         + g_avg / 36 * hx1 * hy1 * _localM[0, 0];
@@ -576,10 +594,6 @@ class FEMSlaeBuilder
                     _slae.Mat[mr[2] + 1] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 3] + hx1 / hy1 * _localG2[0, 3])
                         + g_avg / 36 * hx1 * hy1 * _localM[0, 3];
 
-                    var x0 = _mesh.X[xi];
-                    var x1 = _mesh.X[xi+1];
-                    var y0 = _mesh.Y[yi];
-                    var y1 = _mesh.Y[yi+1];
                     Real f1 = _funcs.F(dom4.Value, x0, y0);
                     Real f2 = _funcs.F(dom4.Value, x1, y0);
                     Real f3 = _funcs.F(dom4.Value, x0, y1);
