@@ -402,7 +402,7 @@ class FEMSlaeBuilder
         }
         
         // не функция из csharp потому что мне её ещё нужно самому реализовать в OpenCL
-        static int QFind<T> (T[] where, int start, int end, T what)
+        static int QFind<T> (T[] @where, int start, int end, T what)
         where T: unmanaged, INumber<T>
         {
             int beg = start;
@@ -426,7 +426,16 @@ class FEMSlaeBuilder
 
             return beg;
         }
+        
+        static int LFind<T> (T[] where, T what, int start)
+        where T: unmanaged, INumber<T>
+        {
+            while (@where[start] != what) start++;
+            return start;
+            
+        }
 
+        Span<Real> matc = stackalloc Real[8];
         for (int yi = 0; yi < _mesh.Y.Length; yi++)
         {
             for (int xi = 0; xi < _mesh.X.Length; xi++)
@@ -440,72 +449,72 @@ class FEMSlaeBuilder
                 // номера текущего узла и соседних с ним сверху и снизу 
                 // в порядке снизу вверх
                 // могут выходить за пределы нумерации
-                var r = new int[3];
-                r[1] = targetNode;
-                r[0] = r[1] - _mesh.X.Length;
-                r[2] = r[1] + _mesh.X.Length;
+                int r1 = targetNode;
+                int r0 = r1 - _mesh.X.Length;
+                int r2 = r1 + _mesh.X.Length;
 
                 // номера этих узлов в строке матрицы, относящейся к текущему узлу
-                int[] mr = [-1, -1, -1];
+                int mr0 = -1;
+                int mr1 = -1;
+                int mr2 = -1;
+                
                 int beg = _slae.Ia[targetNode];
                 int bound = _slae.Ia[targetNode + 1] - 1;
-                if (r[0] >= 0)
+
+                // TODO: можно немного ускорить поиск за счёт перемещения левой границы поиска
+                // но возможно быстрее будет сделать простой линейный поиск вместо "быстрого"
+                // int curr = beg;
+                if (r0 >= 0)
                 {
-                    mr[0] = QFind(_slae.Ja, beg, bound, r[0]);
-                    beg = mr[0];
+                    mr0 = LFind(_slae.Ja, r0, beg) - beg;
                 }
                 // else оставить -1, так как узел вышел за пределы матрицы
 
-                if (r[1] % _mesh.X.Length == 0)
+                if (r1 % _mesh.X.Length == 0)
                 {
-                    mr[1] = QFind(_slae.Ja, beg, bound, r[1]+1) - 1;
+                    mr1 = LFind(_slae.Ja, r1+1, beg) - 1 - beg;
                 }
                 else
                 {
-                    mr[1] = QFind(_slae.Ja, beg, bound, r[1]-1);
+                    mr1 = LFind(_slae.Ja, r1-1, beg) - beg;
                 }
 
-                if (r[2] < _slae.Di.Length)
+                if (r2 < _slae.Di.Length)
                 {
-                    mr[2] = QFind(_slae.Ja, beg, bound, r[2]);
+                    mr2 = LFind(_slae.Ja, r2, beg) - beg;
                 }
 
-                // Console.WriteLine("mr = {0}, {1}, {2}", mr[0], mr[1], mr[2]);
+                // Console.WriteLine("mr = {0}, {1}, {2}", mr0, mr1, mr2);
                 // Console.WriteLine("xi, yi = {0}, {1}", xi, yi);
                 // Console.WriteLine("dom = {0}, {1}, {2}, {3}", dom1, dom2, dom3, dom4);
 
-                Real mc11 = 0;
-                Real mc12 = 0;
-                Real mc13 = 0;
-
-                Real mc21 = 0;
-                Real mc22 = 0;
-                Real mc23 = 0;
-
-                Real mc31 = 0;
-                Real mc32 = 0;
-                Real mc33 = 0;
-
+                for (int i = 0; i < 8; i++)
+                {
+                    matc[i] = 0;
+                }
+                
+                Real dic = 0;
                 Real bc = 0;
+
+                Real x1 = _mesh.X[xi];
+                Real y1 = _mesh.Y[yi];
 
                 if (dom1.HasValue)
                 {
                     var x0 = _mesh.X[xi-1];
-                    var x1 = _mesh.X[xi];
                     var y0 = _mesh.Y[yi-1];
-                    var y1 = _mesh.Y[yi];
                     var l_avg = GetLamdaAverage(dom1.Value, x0, y0, x1, y1);
                     var g_avg = GetGammaAverage(dom1.Value, x0, y0, x1, y1);
                     var hx0 = x1 - x0;
                     var hy0 = y1 - y0;
 
-                    _slae.Mat[mr[0] - 1] += l_avg / 6 * (hy0 / hx0 * _localG1[3, 0] + hx0 / hy0 * _localG2[3, 0])
+                    matc[mr0 - 1] += l_avg / 6 * (hy0 / hx0 * _localG1[3, 0] + hx0 / hy0 * _localG2[3, 0])
                         + g_avg / 36 * hx0 * hy0 * _localM[3, 0];
-                    _slae.Mat[mr[0]]     += l_avg / 6 * (hy0 / hx0 * _localG1[3, 1] + hx0 / hy0 * _localG2[3, 1])
+                    matc[mr0] += l_avg / 6 * (hy0 / hx0 * _localG1[3, 1] + hx0 / hy0 * _localG2[3, 1])
                         + g_avg / 36 * hx0 * hy0 * _localM[3, 1];
-                    _slae.Mat[mr[1]]     += l_avg / 6 * (hy0 / hx0 * _localG1[3, 2] + hx0 / hy0 * _localG2[3, 2])
+                    matc[mr1]     += l_avg / 6 * (hy0 / hx0 * _localG1[3, 2] + hx0 / hy0 * _localG2[3, 2])
                         + g_avg / 36 * hx0 * hy0 * _localM[3, 2];
-                    _slae.Di[targetNode] += l_avg / 6 * (hy0 / hx0 * _localG1[3, 3] + hx0 / hy0 * _localG2[3, 3])
+                    dic += l_avg / 6 * (hy0 / hx0 * _localG1[3, 3] + hx0 / hy0 * _localG2[3, 3])
                         + g_avg / 36 * hx0 * hy0 * _localM[3, 3];
 
                     Real f1 = _funcs.F(dom1.Value, x0, y0);
@@ -513,93 +522,96 @@ class FEMSlaeBuilder
                     Real f3 = _funcs.F(dom1.Value, x0, y1);
                     Real f4 = _funcs.F(dom1.Value, x1, y1);
 
-                    _slae.B[targetNode] += hx0 * hy0 / 36 * (f1 + 2 * f2 + 2 * f3 + 4 * f4);
+                    bc += hx0 * hy0 / 36 * (f1 + 2 * f2 + 2 * f3 + 4 * f4);
                 }
 
                 // continue;
 
                 if (dom2.HasValue)
                 {
-                    var x0 = _mesh.X[xi];
-                    var x1 = _mesh.X[xi+1];
+                    var x2 = _mesh.X[xi+1];
                     var y0 = _mesh.Y[yi-1];
-                    var y1 = _mesh.Y[yi];
-                    var l_avg = GetLamdaAverage(dom2.Value, x0, y0, x1, y1);
-                    var g_avg = GetGammaAverage(dom2.Value, x0, y0, x1, y1);
-                    var hx1 = x1 - x0;
+                    var l_avg = GetLamdaAverage(dom2.Value, x1, y0, x2, y1);
+                    var g_avg = GetGammaAverage(dom2.Value, x1, y0, x2, y1);
+                    var hx1 = x2 - x1;
                     var hy0 = y1 - y0;
 
-                    _slae.Mat[mr[0]] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 0] + hx1 / hy0 * _localG2[2, 0])
+                    matc[mr0] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 0] + hx1 / hy0 * _localG2[2, 0])
                         + g_avg / 36 * hx1 * hy0 * _localM[2, 0];
-                    _slae.Mat[mr[0] + 1] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 1] + hx1 / hy0 * _localG2[2, 1])
+                    matc[mr0 + 1] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 1] + hx1 / hy0 * _localG2[2, 1])
                         + g_avg / 36 * hx1 * hy0 * _localM[2, 1];
-                    _slae.Di[targetNode] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 2] + hx1 / hy0 * _localG2[2, 2])
+                    dic += l_avg / 6 * (hy0 / hx1 * _localG1[2, 2] + hx1 / hy0 * _localG2[2, 2])
                         + g_avg / 36 * hx1 * hy0 * _localM[2, 2];
-                    _slae.Mat[mr[1] + 1] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 3] + hx1 / hy0 * _localG2[2, 3])
+                    matc[mr1 + 1] += l_avg / 6 * (hy0 / hx1 * _localG1[2, 3] + hx1 / hy0 * _localG2[2, 3])
                         + g_avg / 36 * hx1 * hy0 * _localM[2, 3];
 
-                    Real f1 = _funcs.F(dom2.Value, x0, y0);
-                    Real f2 = _funcs.F(dom2.Value, x1, y0);
-                    Real f3 = _funcs.F(dom2.Value, x0, y1);
-                    Real f4 = _funcs.F(dom2.Value, x1, y1);
+                    Real f1 = _funcs.F(dom2.Value, x1, y0);
+                    Real f2 = _funcs.F(dom2.Value, x2, y0);
+                    Real f3 = _funcs.F(dom2.Value, x1, y1);
+                    Real f4 = _funcs.F(dom2.Value, x2, y1);
 
-                    _slae.B[targetNode] += hx1 * hy0 / 36 * (2 * f1 + f2 + 4 * f3 + 2 * f4);
+                    bc += hx1 * hy0 / 36 * (2 * f1 + f2 + 4 * f3 + 2 * f4);
                 }
 
                 if (dom3.HasValue)
                 {
                     var x0 = _mesh.X[xi-1];
-                    var x1 = _mesh.X[xi];
-                    var y0 = _mesh.Y[yi];
-                    var y1 = _mesh.Y[yi+1];
-                    var l_avg = GetLamdaAverage(dom3.Value, x0, y0, x1, y1);
-                    var g_avg = GetGammaAverage(dom3.Value, x0, y0, x1, y1);
+                    var y2 = _mesh.Y[yi+1];
+                    var l_avg = GetLamdaAverage(dom3.Value, x0, y1, x1, y2);
+                    var g_avg = GetGammaAverage(dom3.Value, x0, y1, x1, y2);
                     var hx0 = x1 - x0;
-                    var hy1 = y1 - y0;
+                    var hy1 = y2 - y1;
 
-                    _slae.Mat[mr[1]] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 0] + hx0 / hy1 * _localG2[1, 0])
+                    matc[mr1] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 0] + hx0 / hy1 * _localG2[1, 0])
                         + g_avg / 36 * hx0 * hy1 * _localM[1, 0];
-                    _slae.Di[targetNode] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 1] + hx0 / hy1 * _localG2[1, 1])
+                    dic += l_avg / 6 * (hy1 / hx0 * _localG1[1, 1] + hx0 / hy1 * _localG2[1, 1])
                         + g_avg / 36 * hx0 * hy1 * _localM[1, 1];
-                    _slae.Mat[mr[2] - 1] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 2] + hx0 / hy1 * _localG2[1, 2])
+                    matc[mr2 - 1] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 2] + hx0 / hy1 * _localG2[1, 2])
                         + g_avg / 36 * hx0 * hy1 * _localM[1, 2];
-                    _slae.Mat[mr[2]] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 3] + hx0 / hy1 * _localG2[1, 3])
+                    matc[mr2] += l_avg / 6 * (hy1 / hx0 * _localG1[1, 3] + hx0 / hy1 * _localG2[1, 3])
                         + g_avg / 36 * hx0 * hy1 * _localM[1, 3];
 
-                    Real f1 = _funcs.F(dom3.Value, x0, y0);
-                    Real f2 = _funcs.F(dom3.Value, x1, y0);
-                    Real f3 = _funcs.F(dom3.Value, x0, y1);
-                    Real f4 = _funcs.F(dom3.Value, x1, y1);
+                    Real f1 = _funcs.F(dom3.Value, x0, y1);
+                    Real f2 = _funcs.F(dom3.Value, x1, y1);
+                    Real f3 = _funcs.F(dom3.Value, x0, y2);
+                    Real f4 = _funcs.F(dom3.Value, x1, y2);
 
-                    _slae.B[targetNode] += hx0 * hy1 / 36 * (2 * f1 + 4 * f2 + f3 + 2 * f4);
+                    bc += hx0 * hy1 / 36 * (2 * f1 + 4 * f2 + f3 + 2 * f4);
                 }
 
                 if (dom4.HasValue)
                 {
-                    var x0 = _mesh.X[xi];
-                    var x1 = _mesh.X[xi+1];
-                    var y0 = _mesh.Y[yi];
-                    var y1 = _mesh.Y[yi+1];
-                    var l_avg = GetLamdaAverage(dom4.Value, x0, y0, x1, y1);
-                    var g_avg = GetGammaAverage(dom4.Value, x0, y0, x1, y1);
-                    var hx1 = x1 - x0;
-                    var hy1 = y1 - y0;
+                    var x2 = _mesh.X[xi+1];
+                    var y2 = _mesh.Y[yi+1];
+                    var l_avg = GetLamdaAverage(dom4.Value, x1, y1, x2, y2);
+                    var g_avg = GetGammaAverage(dom4.Value, x1, y1, x2, y2);
+                    var hx1 = x2 - x1;
+                    var hy1 = y2 - y1;
 
-                    _slae.Di[targetNode] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 0] + hx1 / hy1 * _localG2[0, 0])
+                    dic += l_avg / 6 * (hy1 / hx1 * _localG1[0, 0] + hx1 / hy1 * _localG2[0, 0])
                         + g_avg / 36 * hx1 * hy1 * _localM[0, 0];
-                    _slae.Mat[mr[1] + 1] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 1] + hx1 / hy1 * _localG2[0, 1])
+                    matc[mr1 + 1] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 1] + hx1 / hy1 * _localG2[0, 1])
                         + g_avg / 36 * hx1 * hy1 * _localM[0, 1];
-                    _slae.Mat[mr[2]] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 2] + hx1 / hy1 * _localG2[0, 2])
+                    matc[mr2] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 2] + hx1 / hy1 * _localG2[0, 2])
                         + g_avg / 36 * hx1 * hy1 * _localM[0, 2];
-                    _slae.Mat[mr[2] + 1] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 3] + hx1 / hy1 * _localG2[0, 3])
+                    matc[mr2 + 1] += l_avg / 6 * (hy1 / hx1 * _localG1[0, 3] + hx1 / hy1 * _localG2[0, 3])
                         + g_avg / 36 * hx1 * hy1 * _localM[0, 3];
 
-                    Real f1 = _funcs.F(dom4.Value, x0, y0);
-                    Real f2 = _funcs.F(dom4.Value, x1, y0);
-                    Real f3 = _funcs.F(dom4.Value, x0, y1);
-                    Real f4 = _funcs.F(dom4.Value, x1, y1);
+                    Real f1 = _funcs.F(dom4.Value, x1, y1);
+                    Real f2 = _funcs.F(dom4.Value, x2, y1);
+                    Real f3 = _funcs.F(dom4.Value, x1, y2);
+                    Real f4 = _funcs.F(dom4.Value, x2, y2);
 
-                    _slae.B[targetNode] += hx1 * hy1 / 36 * (4 * f1 + 2 * f2 + 2 * f3 + f4);
+                    bc += hx1 * hy1 / 36 * (4 * f1 + 2 * f2 + 2 * f3 + f4);
+                }
+
+                _slae.Di[targetNode] = dic;
+                _slae.B[targetNode]  = bc;
+
+                // перемещение строки в матрицу
+                for (int i = beg; i <= bound; i++)
+                {
+                    _slae.Mat[i] = matc[i-beg];
                 }
             }
         }
@@ -907,7 +919,7 @@ class FEMSlaeBuilder
 
     void GlobalMatrixBuildImplOcl ()
     {
-        var prog = new Program("Kernels.clcpp");
+        var prog = new Program("Kernels.cl");
         var kernCompose = prog.GetKernel(
             "global_matrix_compose",
             globalWork: new(PaddedTo(Mesh.X.Length, 4), PaddedTo(Mesh.Y.Length, 4)),
@@ -951,7 +963,7 @@ class FEMSlaeBuilder
 
     void GlobalMatrixBuildImplOclV2 ()
     {
-        var prog = new Program("Kernels.clcpp");
+        var prog = new Program("ComposeV2.cl");
         var kernCompose = prog.GetKernel(
             "global_matrix_compose_v2",
             globalWork: new(PaddedTo(Mesh.X.Length, 4), PaddedTo(Mesh.Y.Length, 4)),
@@ -982,7 +994,7 @@ class FEMSlaeBuilder
         di.DeviceReadTo(_slae.Di);
         b.DeviceReadTo(_slae.B);
 
-        // TODO: это легко сделать с OpenCL
+        // TODO: это легко сделать в OpenCL
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
         for (int i = 0; i < _slae.Di.Length; i++)

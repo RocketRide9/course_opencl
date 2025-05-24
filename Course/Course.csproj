@@ -17,7 +17,13 @@
   </ItemGroup>    
 
   <ItemGroup>
-    <None Update="Kernels.clcpp">
+    <None Update="Kernels.cl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="FEMShared.cl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="ComposeV2.cl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="ProblemParams.json">
