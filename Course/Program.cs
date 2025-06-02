@@ -3,8 +3,6 @@ using System.Globalization;
 using System.Diagnostics;
 using Real = double;
 
-using BenchmarkDotNet.Running;
-
 class Course
 {
     static void Main(string[] args)
@@ -15,7 +13,7 @@ class Course
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchMsrMul).Assembly).RunAll();
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchBicgStabPure).Assembly).RunAll();
         // SolveAndExportSomeSlae();
-        // TestConvergence();
+        TestConvergence();
         // TestParallelBuildV2();
         // TestHostVSOpenCLOnce();
         // TestAtomicAdd();
@@ -31,7 +29,7 @@ class Course
         Debugger.Break();
         */
         
-        TestBuildImplsIncreasing();
+        // TestBuildImplsIncreasing();
     }
 
     static void TestParallelBuildV2()
@@ -133,8 +131,6 @@ class Course
     {
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../InputRect4x5");
-        // TODO: 
-        // prob.slaeBuilder.GlobalMatrixImpl = GlobalMatrixImplType.Host;
 
         for (int i = 0; i < 4; i++)
         {
@@ -224,8 +220,9 @@ class Course
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../InputRect4x5");
 
-        // норма 1706 итераций на решение слау
-        /*
+        // норма 1706 итераций на решение слау n=?
+        // 385 итерация на решение слау n = 2^16
+        
         Console.WriteLine("Classic Parallel:");
         for (int i = 0; i < REPEAT_COUNT; i++)
         { // Classic Parallel build
@@ -233,14 +230,16 @@ class Course
             prob.buildType = GlobalMatrixImplType.HostParallel;
             prob.Rebuild();
             sw.Stop();
-            Console.WriteLine($"(build time {sw.ElapsedMilliseconds}ms)");
+            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
 
+            
             var (ans, iters, rr) = prob.SolveBiCGStab();
             var err = prob.Lebeg2Err(ans);
             Console.WriteLine($"(err {err}) {iters} (discrep: {rr})");
+            
         }
-        */
         
+        /*
         Console.WriteLine("Classic:");
         for (int i = 0; i < REPEAT_COUNT; i++)
         { // Classic Parallel build
@@ -248,14 +247,12 @@ class Course
             prob.buildType = GlobalMatrixImplType.Host;
             prob.Rebuild();
             sw.Stop();
-            Console.WriteLine($"(build time {sw.ElapsedMilliseconds}ms)");
+            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
 
             var (ans, iters, rr) = prob.SolveBiCGStab();
             var err = prob.Lebeg2Err(ans);
             Console.WriteLine($"(err {err}) (iters {iters}) (discrep {rr})");
         }
-        /*
-        */
         Console.WriteLine("Host V2:");
         for (int i = 0; i < REPEAT_COUNT; i++)
         { // ParallelV2 build
@@ -263,12 +260,13 @@ class Course
             prob.buildType = GlobalMatrixImplType.HostV2;
             prob.Rebuild();
             sw.Stop();
-            Console.WriteLine($"(build time {sw.ElapsedMilliseconds}ms)");
+            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
             
             var (ans, iters, rr) = prob.SolveBiCGStab();
             var err = prob.Lebeg2Err(ans);
             Console.WriteLine($"(err {err}) (iters {iters}) (discrep {rr})");
         }
+        */
         Console.WriteLine("OpenCL V2:");
         for (int i = 0; i < REPEAT_COUNT; i++)
         { // ParallelOclV2 build
@@ -276,14 +274,16 @@ class Course
             prob.buildType = GlobalMatrixImplType.OpenCLV2;
             prob.Rebuild();
             sw.Stop();
-            Console.WriteLine($"(build time {sw.ElapsedMilliseconds}ms)");
+            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
+            
             
             var (ans, iters, rr) = prob.SolveBiCGStab();
             var err = prob.Lebeg2Err(ans);
             Console.WriteLine($"(err {err}) (iters {iters}) (discrep: {rr})");
+            
         }
 
-        /*
+        
         Console.WriteLine("OpenCL:");
         for (int i = 0; i < REPEAT_COUNT; i++)
         { // ParallelOclV2 build
@@ -293,11 +293,11 @@ class Course
             sw.Stop();
             Console.WriteLine($"(build time: {sw.ElapsedMilliseconds}ms)");
             
-            // var (ans, iters, rr) = prob.SolveBiCGStab();
-            // var err = prob.Lebeg2Err(ans);
-            // Console.WriteLine($"(err {err}) {iters} (discrep: {rr})");
+            var (ans, iters, rr) = prob.SolveBiCGStab();
+            var err = prob.Lebeg2Err(ans);
+            Console.WriteLine($"(err {err}) {iters} (discrep: {rr})");
         }
-        */
+        
     }
 
     static void TestConvergence()
@@ -360,7 +360,7 @@ class Course
         {
             ProblemLine prob;
 
-#if false
+#if true
             prob = new ProblemLine(task, "../../../InputRect4x5");
             _TestBicgOclBatch(prob);
             Console.WriteLine();

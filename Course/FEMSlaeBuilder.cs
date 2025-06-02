@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Numerics;
 using SparkCL;
 using Real = double;
@@ -38,6 +39,13 @@ class FEMSlaeBuilder
         {1, 2, 2, 4},
     };
 
+    static int LFind<T> (T[] where, T what, int start)
+    where T: unmanaged, INumber<T>
+    {
+        while (@where[start] != what) start++;
+        return start;
+    }    
+    
     readonly TaskFuncs _funcs;
 
     public FEMSlaeBuilder(RectMesh mesh, TaskFuncs funcs)
@@ -67,7 +75,7 @@ class FEMSlaeBuilder
 
     void BoundaryConditionType1Apply(BoundaryCondition bc)
     {
-        /* учитывание разбиения сетки */
+        /* учёт разбиения сетки */
         int x1 = _mesh.XAfterGridInit(bc.X1);
         int x2 = _mesh.XAfterGridInit(bc.X2);
         int y1 = _mesh.YAfterGridInit(bc.Y1);
@@ -76,63 +84,41 @@ class FEMSlaeBuilder
 
         var num = bc.Num;
 
-        Span<Real> localB = stackalloc Real[2]; // 'hat B'
-
-        int a1 = x1;
-        int a2 = x2;
-        int b1 = y1;
-        int b2 = y2;
-
-        ref int e1 = ref a1;
-        ref int e2 = ref a2;
-        int upperBound;
-
-        if (y1 == y2)
+        if (x1 == x2)
         {
-            e1 = ref a1;
-            e2 = ref a2;
-            upperBound = x2;
-        } else if (x1 == x2) {
-            e1 = ref b1;
-            e2 = ref b2;
-            upperBound = y2;
-        } else {
-            throw new ArgumentException("Странное краевое условие");
-        }
-
-        for (e2 = e1 + 1; e2 <= upperBound; e2++)
-        {
-            localB[0] = _funcs.Ug(num, _mesh.X[a1], _mesh.Y[b1]);
-            localB[1] = _funcs.Ug(num, _mesh.X[a2], _mesh.Y[b2]);
-
-            // номера узлов, через которые проъодит первое краевое условие
-            Span<int> m = [
-                b1 * _mesh.X.Length + a1,
-                b2 * _mesh.X.Length + a2
-            ];
-            _slae.B[m[0]] = localB[0];
-            _slae.B[m[1]] = localB[1];
-
-            _slae.Di[m[0]] = 1;
-            _slae.Di[m[1]] = 1;
-
-            /* Обнуление строки */
-            for (int idx = 0; idx < 2; idx++)
+            for (int yi = y1; yi <= y2; yi++)
             {
-                int ig0 = _slae.Ia[m[idx]];
-                int ig1 = _slae.Ia[m[idx]+1];
-                for (int i = ig0; i < ig1; i++)
+                var m = yi * _mesh.X.Length + x1;
+                _slae.B[m] = _funcs.Ug(num, _mesh.X[x1], _mesh.Y[yi]);
+                _slae.Di[m] = 1;
+                int ig0 = _slae.Ia[m];
+                int ig1 = _slae.Ia[m+1];
+                for (int j = ig0; j < ig1; j++)
                 {
-                    _slae.Mat[i] = 0;
+                    _slae.Mat[j] = 0;
                 }
             }
-            e1 = e2;
+        } else if (y1 == y2) {
+            for (int xi = x1; xi <= x2; xi++)
+            {
+                var m = y1 * _mesh.X.Length + xi;
+                _slae.B[m] = _funcs.Ug(num, _mesh.X[xi], _mesh.Y[y1]);
+                _slae.Di[m] = 1;
+                int ig0 = _slae.Ia[m];
+                int ig1 = _slae.Ia[m+1];
+                for (int j = ig0; j < ig1; j++)
+                {
+                    _slae.Mat[j] = 0;
+                }
+            }
+        } else {
+            throw new ArgumentException("Странное краевое условие");
         }
     }
 
     void BoundaryConditionType2Apply(BoundaryCondition bc)
     {
-        /* учитывание разбиения сетки */
+        /* учёт разбиения сетки */
         int x1 = _mesh.XAfterGridInit(bc.X1);
         int x2 = _mesh.XAfterGridInit(bc.X2);
         int y1 = _mesh.YAfterGridInit(bc.Y1);
@@ -141,48 +127,36 @@ class FEMSlaeBuilder
 
         var num = bc.Num;
 
-        Span<Real> localB = stackalloc Real[2];
-
-        int a1 = x1;
-        int a2 = x2;
-        int b1 = y1;
-        int b2 = y2;
-
-        ref int e1 = ref a1;
-        ref int e2 = ref a2;
-        int upperBound;
-
-        if (y1 == y2)
+        if (x1 == x2)
         {
-            e1 = ref a1;
-            e2 = ref a2;
-            upperBound = x2;
-        } else if (x1 == x2) {
-            e1 = ref b1;
-            e2 = ref b2;
-            upperBound = y2;
+            for (int yi = y1; yi < y2; yi++)
+            {
+                var h = _mesh.Y[yi+1] - _mesh.Y[yi];
+                
+                Real k1 = _funcs.Theta(num, _mesh.X[x1], _mesh.Y[yi]); // aka theta1
+                Real k2 = _funcs.Theta(num, _mesh.X[x2], _mesh.Y[yi+1]);
+                int n1 =  yi    * _mesh.X.Length + x1;
+                int n2 = (yi+1) * _mesh.X.Length + x2;
+                
+                _slae.B[n1] += h * (2 * k1 + k2) / 6;
+                _slae.B[n2] += h * (k1 + 2 * k2) / 6;
+            }
+        } else if (y1 == y2) {
+            for (int xi = x1; xi < x2; xi++)
+            {
+                var h = _mesh.X[xi+1] - _mesh.X[xi];
+                
+                Real k1 = _funcs.Theta(num, _mesh.X[xi  ], _mesh.Y[y1]); // aka theta1
+                Real k2 = _funcs.Theta(num, _mesh.X[xi+1], _mesh.Y[y2]);
+                int n1 = y1 * _mesh.X.Length + xi;
+                int n2 = y2 * _mesh.X.Length + xi+1;
+                
+                _slae.B[n1] += h * (2 * k1 + k2) / 6;
+                _slae.B[n2] += h * (k1 + 2 * k2) / 6;
+            }
         } else {
             throw new ArgumentException("Странное краевое условие");
-        }
-
-        for (e2 = e1 + 1; e2 <= upperBound; e2++)
-        {
-            /* Формула опирается на предположение что одна из разностей
-            равна нулю */
-            Real h = (_mesh.X[a2] - _mesh.X[a1]) + (_mesh.Y[b2] - _mesh.Y[b1]);
-
-            Real k1 = _funcs.Theta(num, _mesh.X[a1], _mesh.Y[b1]); // aka theta1
-            Real k2 = _funcs.Theta(num, _mesh.X[a2], _mesh.Y[b2]);
-            localB[0] = h * (2 * k1 + k2) / 6;
-            localB[1] = h * (k1 + 2 * k2) / 6;
-
-            int node1_num = b1 * _mesh.X.Length + a1;
-            int node2_num = b2 * _mesh.X.Length + a2;
-            _slae.B[node1_num] += localB[0];
-            _slae.B[node2_num] += localB[1];
-
-            e1 = e2;
-        }
+        }   
     }
 
     void BoundaryConditionType3Apply(BoundaryCondition bc)
@@ -198,87 +172,65 @@ class FEMSlaeBuilder
 
         var localB = new Real[2]; // 'hat B'
         var localA = new Real[2, 2]; // 'hat A'
-
-        int a1 = x1;
-        int a2 = x2;
-        int b1 = y1;
-        int b2 = y2;
-
-        ref int e1 = ref a1;
-        ref int e2 = ref a2;
-        int upperBound;
-
-        if (y1 == y2)
+        Real h;
+        if (x1 == x2)
         {
-            e1 = ref a1;
-            e2 = ref a2;
-            upperBound = x2;
-        } else if (x1 == x2) {
-            e1 = ref b1;
-            e2 = ref b2;
-            upperBound = y2;
+            for (int yi = y1; yi < y2; yi++)
+            {
+                h = _mesh.Y[yi+1] - _mesh.Y[yi];
+                localA[0, 0] = localA[1, 1] = _funcs.Beta(num) * h / 3;
+                localA[0, 1] = localA[1, 0] = _funcs.Beta(num) * h / 6;
+
+                Real k1 = _funcs.uBeta(num, _mesh.X[x1], _mesh.Y[yi  ]);
+                Real k2 = _funcs.uBeta(num, _mesh.X[x2], _mesh.Y[yi+1]);
+                localB[0] = h * _funcs.Beta(num) * (2  * k1 + k2) / 6;
+                localB[1] = h * _funcs.Beta(num) * (k1 + 2  * k2) / 6;
+    
+                var m = new int[2];
+                m[0] = yi       * _mesh.X.Length + x1;
+                m[1] = (yi + 1) * _mesh.X.Length + x2;
+    
+                _slae.B[m[0]] += localB[0];
+                _slae.B[m[1]] += localB[1];
+    
+                _slae.Di[m[0]] += localA[0, 0];
+                _slae.Di[m[1]] += localA[1, 1];
+
+                var res = LFind(_slae.Ja, what: m[1], start: m[0]);
+                _slae.Mat[res] += localA[0, 1];
+                res = LFind(_slae.Ja, what: m[0], start: m[1]);
+                _slae.Mat[res] += localA[1, 0];
+            }
+        } else if (y1 == y2) {
+            for (int xi = x1; xi < x2; xi++)
+            {
+                h = _mesh.X[xi+1] - _mesh.X[xi];
+                localA[0, 0] = localA[1, 1] = _funcs.Beta(num) * h / 3;
+                localA[0, 1] = localA[1, 0] = _funcs.Beta(num) * h / 6;
+
+                Real k1 = _funcs.uBeta(num, _mesh.X[xi  ], _mesh.Y[y1]);
+                Real k2 = _funcs.uBeta(num, _mesh.X[xi+1], _mesh.Y[y2]);
+                localB[0] = h * _funcs.Beta(num) * (2  * k1 + k2) / 6;
+                localB[1] = h * _funcs.Beta(num) * (k1 + 2  * k2) / 6;
+    
+                var m = new int[2];
+                m[0] = y1 * _mesh.X.Length + xi;
+                m[1] = y2 * _mesh.X.Length + xi+1;
+    
+                _slae.B[m[0]] += localB[0];
+                _slae.B[m[1]] += localB[1];
+    
+                _slae.Di[m[0]] += localA[0, 0];
+                _slae.Di[m[1]] += localA[1, 1];
+
+                var res = LFind(_slae.Ja, what: m[1], start: m[0]);
+                _slae.Mat[res] += localA[0, 1];
+                res = LFind(_slae.Ja, what: m[0], start: m[1]);
+                _slae.Mat[res] += localA[1, 0];
+            }
         } else {
             throw new ArgumentException("Странное краевое условие");
-        }
-
-        for (e2 = e1 + 1; e2 <= upperBound; e2++)
-        {
-            Real h = _mesh.X[a2] - _mesh.X[a1] + _mesh.Y[b2] - _mesh.Y[b1];
-
-            localA[0, 0] = localA[1, 1] = _funcs.Beta(num) * h / 3;
-            localA[0, 1] = localA[1, 0] = _funcs.Beta(num) * h / 6;
-
-            Real k1 = _funcs.uBeta(num, _mesh.X[a1], _mesh.Y[b1]);
-            Real k2 = _funcs.uBeta(num, _mesh.X[a2], _mesh.Y[b2]);
-            localB[0] = h * _funcs.Beta(num) * (2  * k1 + k2) / 6;
-            localB[1] = h * _funcs.Beta(num) * (k1 + 2  * k2) / 6;
-
-            var m = new int[2];
-            m[0] = b1 * _mesh.X.Length + a1;
-            m[1] = b2 * _mesh.X.Length + a2;
-
-            _slae.B[m[0]] += localB[0];
-            _slae.B[m[1]] += localB[1];
-
-            _slae.Di[m[0]] += localA[0, 0];
-            _slae.Di[m[1]] += localA[1, 1];
-
-            for (int i = 0; i < 2; i++)
-            {
-                int beg = _slae.Ia[m[i]];
-                for (int j = 0; j < 2; j++)
-                {
-                    // TODO: возможно есть лучше способ пропускать диагональные
-                    // элементы
-                    if (i == j)
-                    {
-                        continue;
-                    }
-                    int end = _slae.Ia[m[i] + 1] - 1;
-                    while (beg < end)
-                    {
-                        int mid = (beg + end) / 2;
-                        if (m[j] > _slae.Ja[mid])
-                        {
-                            beg = mid + 1;
-                        }
-                        else
-                        {
-                            end = mid;
-                        }
-                    }
-
-                    if (_slae.Ja[beg] != m[j])
-                    {
-                        throw new Exception("Quick search failed");
-                    }
-
-                    _slae.Mat[beg] += localA[i, j];
-                    beg++;
-                }
-            }
-            e1 = e2;
-        }
+        } 
     }
 
     void BoundaryConditionsApply()
@@ -313,6 +265,7 @@ class FEMSlaeBuilder
         }
     }
 
+    // TODO: посмотреть сколько времени уходит на эту штуку
     void GlobalMatrixPortraitCompose()
     {
         int numberOfUnknowns(int i) => 4;
@@ -331,8 +284,7 @@ class FEMSlaeBuilder
                 throw new ArgumentException("Странная координата конечного элемента");
             }
         }
-
-
+        
         HashSet<int>[] list = new HashSet<int>[Mesh.nodesCount];
         for (int i = 0; i < list.Length; i++)
         {
@@ -432,7 +384,6 @@ class FEMSlaeBuilder
         {
             while (@where[start] != what) start++;
             return start;
-            
         }
 
         Span<Real> matc = stackalloc Real[8];
@@ -652,11 +603,6 @@ class FEMSlaeBuilder
             {
                 var subDom = _mesh.GetSubdomNumAtElCoords(xi, yi);
 
-                m[0] = yi * _mesh.X.Length + xi;
-                m[1] = m[0] + 1;
-                m[2] = (yi + 1) * _mesh.X.Length + xi;
-                m[3] = m[2] + 1;
-
                 if (!subDom.HasValue) continue;
 
                 Real x0 = _mesh.X[xi];
@@ -699,6 +645,11 @@ class FEMSlaeBuilder
                 localB[1] = hx * hy / 36 * (2 * f1 + 4 * f2 + f3 + 2 * f4);
                 localB[2] = hx * hy / 36 * (2 * f1 + f2 + 4 * f3 + 2 * f4);
                 localB[3] = hx * hy / 36 * (f1 + 2 * f2 + 2 * f3 + 4 * f4);
+
+                m[0] = yi * _mesh.X.Length + xi;
+                m[1] = m[0] + 1;
+                m[2] = (yi + 1) * _mesh.X.Length + xi;
+                m[3] = m[2] + 1;
 
                 /* нахождение в ja индексов элементов в al/au, куда
                     нужно добавить элементы локальных матриц */
@@ -780,7 +731,7 @@ class FEMSlaeBuilder
     void GlobalMatrixBuildImplHostParallel()
     {
         // csharp не нравится stackalloc в циклах
-
+        var kernTime = Stopwatch.StartNew();
         var part_y = Partitioner.Create(0, _mesh.Y.Length - 1);
 
         Parallel.ForEach(part_y, (range, state) =>
@@ -896,6 +847,7 @@ class FEMSlaeBuilder
         }
         );
 
+        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
         for (int i = 0; i < _slae.Di.Length; i++)
@@ -944,7 +896,9 @@ class FEMSlaeBuilder
         kernCompose.SetArg(8, y_axis);
         kernCompose.SetArg(9, y_axis.Length);
 
+        var kernTime = Stopwatch.StartNew();
         kernCompose.Execute();
+        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
 
         mat.DeviceReadTo(_slae.Mat);
         di.DeviceReadTo(_slae.Di);
@@ -988,7 +942,9 @@ class FEMSlaeBuilder
         kernCompose.SetArg(8, y_axis);
         kernCompose.SetArg(9, y_axis.Length);
 
+        var kernTime = Stopwatch.StartNew();
         kernCompose.Execute();
+        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
 
         mat.DeviceReadTo(_slae.Mat);
         di.DeviceReadTo(_slae.Di);
