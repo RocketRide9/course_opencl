@@ -2,11 +2,12 @@
 #define USE_BLAS
 
 using Quasar.Native;
-using SparkAlgos;
+using SparkAlgos.Types;
 using System.Collections.Concurrent;
 using Real = double;
 
-public class BiCGStabPure
+// в какой-то момент этот класс превратился в BiCGStabMkl
+public class BicgStabHost
 {
     int _maxIter;
     Real _eps;
@@ -25,7 +26,7 @@ public class BiCGStabPure
     Real[] s;
     Real[] t;
 
-    public BiCGStabPure(
+    public BicgStabHost(
         int maxIter,
         Real eps)
     {
@@ -149,66 +150,6 @@ public class BiCGStabPure
         #endif
     }
 
-    public static unsafe void MSRMul(
-        ReadOnlySpan<Real> mat,
-        ReadOnlySpan<Real> di,
-        ReadOnlySpan<int> ia,
-        ReadOnlySpan<int> ja,
-        int n,
-        ReadOnlySpan<Real> v,
-        Span<Real> res)
-    {
-#if HOST_PARALLEL
-        var partitioner = Partitioner.Create(0, ia.Length);
-        fixed(Real* _p_mat = mat)
-        fixed(Real* _p_di = di)
-        fixed(int* _p_ia = ia)
-        fixed(int* _p_ja = ja)
-        fixed(Real* _p_v = v)
-        fixed(Real* _p_res = res)
-        {
-            var p_mat = _p_mat;
-            var p_di = _p_di;
-            var p_ia = _p_ia;
-            var p_ja = _p_ja;
-            var p_v = _p_v;
-            var p_res = _p_res;
-            Parallel.ForEach(partitioner, (range, state) =>
-            {
-                for (int i = range.Item1; i < range.Item2; i++)
-                {
-                    int start = p_ia[i];
-                    int stop = p_ia[i + 1];
-                    Real dot = p_di[i] * p_v[i];
-                    for (int a = start; a < stop; a++)
-                    {
-                        dot += p_mat[a] * p_v[p_ja[a]];
-                    }
-                    p_res[i] = dot;
-                }
-            });
-        }
-#else
-        fixed(Real* p_mat = mat)
-        fixed(Real* p_di = di)
-        fixed(int* p_ia = ia)
-        fixed(int* p_ja = ja)
-        fixed(Real* p_v = v)
-        fixed(Real* p_res = res)
-        for (int i = 0; i < ia.Length - 1; i++)
-        {
-            int start = p_ia[i];
-            int stop = p_ia[i + 1];
-            Real dot = p_di[i] * p_v[i];
-            for (int a = start; a < stop; a++)
-            {
-                dot += p_mat[a] * p_v[p_ja[a]];
-            }
-            p_res[i] = dot;
-        }
-#endif
-    }
-
     // Выделить память для временных массивов
     // n - длина каждого массива
     public void AllocateTemps(int n)
@@ -233,15 +174,11 @@ public class BiCGStabPure
     }
 
     // x используется как начальное приближение, туда же попадёт ответ
-    public (Real rr, Real pp, int iter) Solve(SlaeRef slae, Span<Real> x)
+    public (Real rr, Real pp, int iter) Solve(Types.Matrix matrix, Span<Real> b, Span<Real> x)
     {
         AllocateTemps(x.Length);
 
-        var _mat = slae.Mat;
-        var _di  = slae.Di;
-        var _b   = slae.B;
-        var _ia  = slae.Ia;
-        var _ja  = slae.Ja;
+        var _b   = b;
 
         var r       = this.r     .AsSpan();
         var r_hat   = this.r_hat .AsSpan();
@@ -258,10 +195,10 @@ public class BiCGStabPure
         
         
         // precond
-        _di.CopyTo(di_inv);
+        matrix.Di.CopyTo(di_inv);
         Rsqrt(di_inv);
         // 1.
-        MSRMul(_mat, _di, _ia, _ja, _n, x, t);
+        matrix.Mul(x, t);
         _b.CopyTo(r);
         Axpy(-1, t, r);
         // BLAS.axpy(_n, -1, t, r);
@@ -282,7 +219,7 @@ public class BiCGStabPure
             Vmul(y, di_inv);
 
             // 2.
-            MSRMul(_mat, _di, _ia, _ja, _n, y, nu);
+            matrix.Mul(y, nu);
 
             // 3.
             Real rnu = Dot(r_hat, nu);
@@ -315,7 +252,7 @@ public class BiCGStabPure
             Vmul(z, di_inv);
 
             // 8.
-            MSRMul(_mat, _di, _ia, _ja, _n, z, t);
+            matrix.Mul(z, t);
 
             // 9.
             t.CopyTo(kt);
@@ -357,7 +294,7 @@ public class BiCGStabPure
             pp = pp1;
         }
 
-        MSRMul(_mat, _di, _ia, _ja, _n, x, t);
+        matrix.Mul(x, t);
         _b.CopyTo(r);
         Axpy(-1, t, r);
         // BLAS.axpy(_x.Length, -1, t, r);

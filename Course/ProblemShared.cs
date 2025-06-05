@@ -1,6 +1,5 @@
 using Real = double;
 
-using System.Numerics;
 using System.Text.Json.Serialization;
 
 [JsonSerializable(typeof(ProblemParams))]
@@ -54,18 +53,17 @@ public struct BoundaryCondition
     public int Y2;
 }
 
-public struct Slae2
+#if false
+public struct MsrMatrix
 {
-    public Real[] Mat;
+    public Real[] Elems;
     public Real[] Di;
-    public Real[] B;
     public int[] Ia;
     public int[] Ja;
 
-    public SparkAlgos.SlaeRef AsRef() => new() {
-        Mat = Mat,
+    public SparkAlgos.Types.MsrMatrixRef AsRef() => new() {
+        Elems = Elems,
         Di = Di,
-        B = B,
         Ia = Ia,
         Ja = Ja,
     };
@@ -103,14 +101,13 @@ public struct Slae2
 
     public void Serialize()
     {
-        ArraySerialize(Mat, "mat.txt");
+        ArraySerialize(Elems, "mat.txt");
         ArraySerialize(Di, "di.txt");
-        // Console.WriteLine($"{Di[4500]}");
-        ArraySerialize(B, "b.txt");
         ArraySerialize(Ia, "ia.txt");
         ArraySerialize(Ja, "ja.txt");
     }
 }
+#endif
 
 public struct ComputationalDomain
 {

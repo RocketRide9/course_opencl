@@ -1,7 +1,11 @@
-using SparkCL;
+using Real = double;
+
 using System.Globalization;
 using System.Diagnostics;
-using Real = double;
+
+using SparkCL;
+
+using SlaeBuilder;
 
 class Course
 {
@@ -85,7 +89,7 @@ class Course
     static void TestAtomicAdd()
     {
         var zero = new ComputeBuffer<Real>([0], BufferFlags.OnDevice);
-        var prog = new Program("Kernels.clcpp");
+        var prog = new ComputeProgram("Kernels.clcpp");
         var kernAddZeros = prog.GetKernel(
             "add_to_zero",
             new(1024, 1024),
@@ -127,6 +131,7 @@ class Course
         }
     }
 
+    /*
     static void SolveAndExportSomeSlae()
     {
         var task = new TaskRect4x5();
@@ -144,6 +149,7 @@ class Course
         }
         prob.Serialize();
     }
+    */
 
     static void TestBuildImplsIncreasing()
     {
@@ -157,7 +163,7 @@ class Course
         for (int re = 0; re < REFINE_COUNT; re++)
         {
             prob.MeshDouble();
-            Console.WriteLine($"n: {prob.femSlae.B.Length}");
+            Console.WriteLine($"n: {prob.b.Length}");
             for (int i = 0; i < REPEAT_COUNT; i++)
             { // Classic Parallel build
                 var sw = Stopwatch.StartNew();
@@ -178,7 +184,7 @@ class Course
         for (int re = 0; re < REFINE_COUNT; re++)
         {
             prob.MeshDouble();
-            Console.WriteLine($"n: {prob.femSlae.B.Length}");
+            Console.WriteLine($"n: {prob.b.Length}");
             for (int i = 0; i < REPEAT_COUNT; i++)
             { // ParallelOclV2 build
                 var sw = Stopwatch.StartNew();
@@ -198,7 +204,7 @@ class Course
         for (int re = 0; re < REFINE_COUNT; re++)
         {
             prob.MeshDouble();
-            Console.WriteLine($"n: {prob.femSlae.B.Length}");
+            Console.WriteLine($"n: {prob.b.Length}");
             for (int i = 0; i < REPEAT_COUNT; i++)
             { // ParallelOclV2 build
                 var sw = Stopwatch.StartNew();
@@ -326,7 +332,7 @@ class Course
                 var (ioTime, kernTime) = Core.MeasureTime();
                 ioTime /= (ulong)1e+6;
                 kernTime /= (ulong)1e+6;
-                Console.Write($"{prob.femSlae.B.Length} {sw_glob.ElapsedMilliseconds} ");
+                Console.Write($"{prob.b.Length} {sw_glob.ElapsedMilliseconds} ");
                 Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds} {kernTime} {ioTime}");
 
                 sw_bicg.Reset();
@@ -347,7 +353,7 @@ class Course
                 sw_bicg.Stop();
                 var err = prob.Lebeg2Err(ans);
 
-                Console.Write($"{prob.femSlae.B.Length} {sw_glob.ElapsedMilliseconds} ");
+                Console.Write($"{prob.b.Length} {sw_glob.ElapsedMilliseconds} ");
                 Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds}");
 
                 sw_bicg.Reset();

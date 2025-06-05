@@ -1,7 +1,13 @@
-using System.Text.Json;
 using Real = double;
-using SparkAlgos;
+
+using System.Text.Json;
 using System.Text.Unicode;
+
+using SparkAlgos.Solver;
+
+using SlaeBuilder;
+using Matrices;
+using Types;
 
 class ProblemLine {
     TaskFuncs _funcs;
@@ -12,7 +18,8 @@ class ProblemLine {
     ComputationalDomain _computationalDomain;
     BoundaryCondition[] _boundaryConditions;
 
-    public Slae2 femSlae;
+    public MsrMatrix matrix;
+    public Real[] b;
     public GlobalMatrixImplType buildType;
 
     // void Repurpose (TaskFuncs taskFunctions, string taskFolder)
@@ -65,30 +72,30 @@ class ProblemLine {
 
         _mesh.Refine(_refineParams);
 
-        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
+        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
         slaeBuilder.GlobalMatrixImpl = buildType;
-        femSlae = slaeBuilder.Build();
+        (matrix, b) = slaeBuilder.Build();
     }
     
     public void Rebuild()
     {
-        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
+        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
         slaeBuilder.GlobalMatrixImpl = buildType;
-        femSlae = slaeBuilder.Build();
+        (matrix, b) = slaeBuilder.Build();
     }
 
     void MeshRefine(RefineParams refineParams)
     {
         _mesh.Refine(refineParams);
-        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
-        femSlae = slaeBuilder.Build();
+        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
+        (matrix, b) = slaeBuilder.Build();
     }
 
     public void MeshDouble()
     {
         _mesh.RefineDiv2();
-        var slaeBuilder = new FEMSlaeBuilder(_mesh, _funcs);
-        femSlae = slaeBuilder.Build();
+        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
+        (matrix, b) = slaeBuilder.Build();
     }
 
 
@@ -171,49 +178,30 @@ class ProblemLine {
         return (Real)Math.Sqrt(sum);
     }
 
-    public void Serialize() => femSlae.Serialize();
+    // public void Serialize() => matrix.Serialize();
 
     public (Real[] ans, int iters, Real rr) SolveBiCGStab ()
     {
-        var x0 = Enumerable.Repeat((Real)0, femSlae.B.Length).ToArray();
+        var x0 = Enumerable.Repeat((Real)0, b.Length).ToArray();
         var solver = new BicgStab(
             _problemParams.maxIter,
             _problemParams.eps
         );
         solver.AllocateTemps(x0.Length);
-        var (rr, _, iter) = solver.Solve(femSlae.AsRef(), x0);
+        var (rr, _, iter) = solver.Solve(matrix.GetComputeMatrix(), b, x0);
 
         return (x0, iter, rr);
     }
-
-    public (Real[] ans, int iters, Real rr) SolveBiCGStabMkl ()
-    {
-        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.B.Length)];
-        var slae = femSlae;
-        var solver = new BiCGStabMkl(
-            slae.Mat,
-            slae.Di,
-            slae.B,
-            slae.Ia,
-            slae.Ja,
-            x0,
-            _problemParams.maxIter,
-            _problemParams.eps
-        );
-        var (ans, rr, _, iter) = solver.Solve();
-
-        return (ans, iter, rr);
-    }
-
+    
     public (Real[] ans, int iters, Real rr) SolveBiCGStabPure ()
     {
-        Real[] x0 = [.. Enumerable.Repeat((Real)0, femSlae.B.Length)];
-        var solver = new BiCGStabPure(
+        Real[] x0 = [.. Enumerable.Repeat((Real)0, b.Length)];
+        var solver = new BicgStabHost(
             _problemParams.maxIter,
             _problemParams.eps
         );
         solver.AllocateTemps(x0.Length);
-        var (rr, _, iter) = solver.Solve(femSlae.AsRef(), x0);
+        var (rr, _, iter) = solver.Solve(matrix, b, x0);
 
         return (x0, iter, rr);
     }

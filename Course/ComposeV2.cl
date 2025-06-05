@@ -141,6 +141,7 @@ kernel void global_matrix_compose_v2(
     int beg = ia[targetNode];
     int bound = ia[targetNode + 1] - 1;
     
+    #if 1
     // TODO: можно немного ускорить поиск за счёт перемещения левой границы поиска
     // но возможно быстрее будет сделать простой линейный поиск вместо "быстрого"
     // int curr = beg;
@@ -163,6 +164,7 @@ kernel void global_matrix_compose_v2(
     {
         mr2 = lfind(ja, r2, beg) - beg;
     }
+    #endif
     
     // printf("mr = %d, %d, %d\n", mr0, mr1, mr2);
 
@@ -279,7 +281,8 @@ kernel void global_matrix_compose_v2(
 
         bc += hx1 * hy1 / 36 * (4 * f1 + 2 * f2 + 2 * f3 + f4);
     }
-
+    
+#if 1
     di[targetNode] = dic;
     b[targetNode] = bc;
 
@@ -288,4 +291,15 @@ kernel void global_matrix_compose_v2(
     {
         mat[i] = matc[i-beg];
     }
+#endif
+    
+#if 0
+    real store = dic;
+    store += bc;
+    for (int i = beg; i <= bound; i++)
+    {
+        store += matc[i-beg];
+    }
+    di[targetNode] = store;
+#endif
 }

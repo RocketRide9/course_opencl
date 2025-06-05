@@ -48,7 +48,7 @@ public class BenchMsrMul
 {
     Real[] x0;
     Real[] res;
-    Slae2 slae;
+    Matrices.MsrMatrix slae;
 
     static void MSRMulSpans(
         ReadOnlySpan<Real> mat,
@@ -172,7 +172,7 @@ public class BenchMsrMul
     
     [Benchmark(Baseline = true)]
     public void Array() => MSRMulArrays(
-        slae.Mat,
+        slae.Elems,
         slae.Di,
         slae.Ia,
         slae.Ja,
@@ -183,7 +183,7 @@ public class BenchMsrMul
     
     [Benchmark]
     public void Hybrid() => MSRMulHybrid(
-        slae.Mat,
+        slae.Elems,
         slae.Di,
         slae.Ia,
         slae.Ja,
@@ -194,7 +194,7 @@ public class BenchMsrMul
     
     [Benchmark]
     public void Span() => MSRMulSpans(
-        slae.Mat,
+        slae.Elems,
         slae.Di,
         slae.Ia,
         slae.Ja,
@@ -205,7 +205,7 @@ public class BenchMsrMul
     
     [Benchmark]
     public void SpanSlice() => MSRMulSpansSlice(
-        slae.Mat,
+        slae.Elems,
         slae.Di,
         slae.Ia,
         slae.Ja,
@@ -216,7 +216,7 @@ public class BenchMsrMul
 
     [Benchmark]
     public void SpanUnsafe() => MSRMulSpansUnsafe(
-        slae.Mat,
+        slae.Elems,
         slae.Di,
         slae.Ia,
         slae.Ja,
@@ -233,12 +233,12 @@ public class BenchMsrMul
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../../../../../InputRect4x5");
 
-        x0 = [.. Enumerable.Repeat((Real)0.7, prob.femSlae.B.Length)];
-        res = [.. Enumerable.Repeat((Real)0.7, prob.femSlae.B.Length)];
+        x0 = [.. Enumerable.Repeat((Real)0.7, prob.b.Length)];
+        res = [.. Enumerable.Repeat((Real)0.7, prob.b.Length)];
 
-        slae = prob.femSlae;
+        slae = prob.matrix;
         
-        Console.WriteLine($"Размерность матрицы: {x0.Length}, mat.Length: {slae.Mat.Length}");
+        Console.WriteLine($"Размерность матрицы: {x0.Length}, mat.Length: {slae.Elems.Length}");
         
         // var (rr, _, iter) = solver.Solve(prob.femSlae, x0);
     }
