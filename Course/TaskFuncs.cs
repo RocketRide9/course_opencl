@@ -1,6 +1,6 @@
 using Real = double;
 
-interface TaskFuncs
+public interface TaskFuncs
 {
     string Description { get; }
 

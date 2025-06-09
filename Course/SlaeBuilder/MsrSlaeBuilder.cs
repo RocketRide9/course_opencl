@@ -7,11 +7,12 @@ using SparkCL;
 using OCLHelper;
 
 using Matrices;
+using Types;
 
 namespace SlaeBuilder;
 using static Shared;
 
-class MsrSlaeBuilder
+class MsrSlaeBuilder : ISlaeBuilder
 {
     MsrMatrix _slae;
     Real[] _b;
@@ -29,7 +30,10 @@ class MsrSlaeBuilder
         _funcs = funcs;
     }
 
-    public (MsrMatrix, Real[]) Build()
+    public static ISlaeBuilder Construct(RectMesh mesh, TaskFuncs funcs)
+        => new MsrSlaeBuilder(mesh, funcs);
+
+    public (Matrix, Real[]) Build()
     {
         GlobalMatrixInit();
         GlobalMatrixBuild();

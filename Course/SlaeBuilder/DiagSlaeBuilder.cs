@@ -3,11 +3,13 @@ using Real = double;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
+using Types;
+
 namespace SlaeBuilder;
 using static Shared;
 using Matrices;
 
-class DiagSlaeBuilder
+class DiagSlaeBuilder : ISlaeBuilder
 {
     DiagMatrix _slae;
     Real[] _b = [];
@@ -25,7 +27,10 @@ class DiagSlaeBuilder
         _funcs = funcs;
     }
 
-    public (DiagMatrix, Real[]) Build()
+    public static ISlaeBuilder Construct(RectMesh mesh, TaskFuncs funcs)
+        => new DiagSlaeBuilder(mesh, funcs);
+
+    public (Matrix, Real[]) Build()
     {
         GlobalMatrixInit();
         GlobalMatrixBuild();
@@ -514,6 +519,7 @@ class DiagSlaeBuilder
         switch (GlobalMatrixImpl)
         {
             case GlobalMatrixImplType.OpenCL:
+                throw new NotImplementedException();
                 // GlobalMatrixBuildImplOcl();
                 break;
             case GlobalMatrixImplType.Host:
@@ -523,9 +529,11 @@ class DiagSlaeBuilder
                 GlobalMatrixBuildImplHostParallel();
                 break;
             case GlobalMatrixImplType.HostV2:
+                throw new NotImplementedException();
                 // GlobalMatrixBuildImplHostV2();
                 break;
             case GlobalMatrixImplType.OpenCLV2:
+                throw new NotImplementedException();
                 // GlobalMatrixBuildImplOclV2();
                 break;
             default:
@@ -632,22 +640,6 @@ class DiagSlaeBuilder
             if (_slae.Di[i] == 0)
             {
                 _slae.Di[i] = 1;
-            }
-        }
-    }
-
-    // https://stackoverflow.com/a/16893641
-    public static double Add(ref double location1, double value)
-    {
-        double newCurrentValue = location1; // non-volatile read, so may be stale
-        while (true)
-        {
-            double currentValue = newCurrentValue;
-            double newValue = currentValue + value;
-            newCurrentValue = Interlocked.CompareExchange(ref location1, newValue, currentValue);
-            if (newCurrentValue.Equals(currentValue))
-            {
-                return newValue;
             }
         }
     }

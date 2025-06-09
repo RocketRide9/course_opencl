@@ -2,7 +2,17 @@ using Real = double;
 
 using System.Numerics;
 
+using Types;
+
 namespace SlaeBuilder;
+
+public interface ISlaeBuilder
+{
+    RectMesh Mesh { get; }
+    GlobalMatrixImplType GlobalMatrixImpl { get; set; }
+    static abstract ISlaeBuilder Construct(RectMesh mesh, TaskFuncs funcs);
+    (Matrix, Real[]) Build();
+}
 
 public enum GlobalMatrixImplType
 {
@@ -34,13 +44,13 @@ static class Shared {
     };
     
     // https://stackoverflow.com/a/16893641
-    public static double Add(ref double location1, double value)
+    public static Real Add(ref Real location1, Real value)
     {
-        double newCurrentValue = location1; // non-volatile read, so may be stale
+        Real newCurrentValue = location1; // non-volatile read, so may be stale
         while (true)
         {
-            double currentValue = newCurrentValue;
-            double newValue = currentValue + value;
+            Real currentValue = newCurrentValue;
+            Real newValue = currentValue + value;
             newCurrentValue = Interlocked.CompareExchange(ref location1, newValue, currentValue);
             if (newCurrentValue.Equals(currentValue))
             {

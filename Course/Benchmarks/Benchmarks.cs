@@ -1,3 +1,4 @@
+/*
 using Real = double;
 
 using System.Globalization;
@@ -48,7 +49,7 @@ public class BenchMsrMul
 {
     Real[] x0;
     Real[] res;
-    Matrices.MsrMatrix slae;
+    Types.Matrix slae;
 
     static void MSRMulSpans(
         ReadOnlySpan<Real> mat,
@@ -243,3 +244,4 @@ public class BenchMsrMul
         // var (rr, _, iter) = solver.Solve(prob.femSlae, x0);
     }
 }
+ */

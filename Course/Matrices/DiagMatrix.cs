@@ -27,7 +27,7 @@ public class DiagMatrix : Matrix
     public int Gap;
     
     int Matrix.Size => Di.Length;
-    Span<double> Matrix.Di => Di;
+    Span<Real> Matrix.Di => Di;
 
     public SparkAlgos.Types.Matrix GetComputeMatrix()
     {
@@ -45,7 +45,7 @@ public class DiagMatrix : Matrix
         });
     }
 
-    void Matrix.Mul(ReadOnlySpan<double> vec, Span<double> res)
+    void Matrix.Mul(ReadOnlySpan<Real> vec, Span<Real> res)
     {
         for (int i = 0; i < vec.Length; i++)
         {
@@ -62,10 +62,14 @@ public class DiagMatrix : Matrix
             
             dot += Di[i] * vec[i];
 
-            dot += Rd0[i] * vec[i+1];
-            dot += Rd1[i] * vec[i+1+Gap];
-            dot += Rd2[i] * vec[i+2+Gap];
-            dot += Rd3[i] * vec[i+3+Gap];
+            t = i+1;
+            if (t < vec.Length) dot += Rd0[i] * vec[t];
+            t = i+1+Gap;
+            if (t < vec.Length) dot += Rd1[i] * vec[i+1+Gap];
+            t = i+2+Gap;
+            if (t < vec.Length) dot += Rd2[i] * vec[i+2+Gap];
+            t = i+3+Gap;
+            if (t < vec.Length) dot += Rd3[i] * vec[i+3+Gap];
             
             res[i] = dot;
         }

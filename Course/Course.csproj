@@ -16,6 +16,11 @@
     <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
   </ItemGroup>    
 
+  <PropertyGroup>
+    <!-- Use double precision floating point numbers -->
+    <DefineConstants>USE_DOUBLE</DefineConstants>
+  </PropertyGroup>
+  
   <ItemGroup>
     <None Update="Kernels.cl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

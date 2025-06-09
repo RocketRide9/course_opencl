@@ -42,7 +42,7 @@ constant real localM[4][4] = {
 #endif
 
 void __attribute__((always_inline))
-atomicAdd_g2(volatile global float *addr, const float val)
+atomicAdd_g(volatile global float *addr, const float val)
 {
     union {
         uint u32;
@@ -57,8 +57,9 @@ atomicAdd_g2(volatile global float *addr, const float val)
     } while( current.u32 != expected.u32 );
 }
 
+/*
 void __attribute__((always_inline))
-atomicAdd_g(volatile global double *addr, const float val)
+atomicAdd_g2(volatile global double *addr, const float val)
 {
     union {
         ulong u64;
@@ -73,6 +74,7 @@ atomicAdd_g(volatile global double *addr, const float val)
             expected.u64, next.u64);
     } while( current.u64 != expected.u64 );
 }
+*/
 
 // test
 kernel void

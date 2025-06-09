@@ -1,4 +1,8 @@
+#if USE_DOUBLE
 using Real = double;
+#else
+using Real = float;
+#endif
 
 using System.Text.Json;
 using System.Text.Unicode;
@@ -18,10 +22,10 @@ class ProblemLine {
     ComputationalDomain _computationalDomain;
     BoundaryCondition[] _boundaryConditions;
 
-    public MsrMatrix matrix;
+    public Matrix matrix;
     public Real[] b;
-    public GlobalMatrixImplType buildType;
-
+    public GlobalMatrixImplType buildType = GlobalMatrixImplType.Host;
+    
     // void Repurpose (TaskFuncs taskFunctions, string taskFolder)
     // {
     //     computationalDomain = ReadDomains(taskFolder);
@@ -71,33 +75,25 @@ class ProblemLine {
         );
 
         _mesh.Refine(_refineParams);
-
-        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
+    }
+    
+    public void Build<T>()
+    where T: ISlaeBuilder
+    {
+        var slaeBuilder = T.Construct(_mesh, _funcs);
         slaeBuilder.GlobalMatrixImpl = buildType;
         (matrix, b) = slaeBuilder.Build();
     }
     
-    public void Rebuild()
-    {
-        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
-        slaeBuilder.GlobalMatrixImpl = buildType;
-        (matrix, b) = slaeBuilder.Build();
-    }
-
     void MeshRefine(RefineParams refineParams)
     {
         _mesh.Refine(refineParams);
-        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
-        (matrix, b) = slaeBuilder.Build();
     }
 
     public void MeshDouble()
     {
         _mesh.RefineDiv2();
-        var slaeBuilder = new MsrSlaeBuilder(_mesh, _funcs);
-        (matrix, b) = slaeBuilder.Build();
     }
-
 
     public Real AnswerAt (Real x, Real y)
     {

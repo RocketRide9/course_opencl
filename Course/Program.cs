@@ -1,4 +1,8 @@
+#if USE_DOUBLE
 using Real = double;
+#else
+using Real = float;
+#endif
 
 using System.Globalization;
 using System.Diagnostics;
@@ -6,6 +10,7 @@ using System.Diagnostics;
 using SparkCL;
 
 using SlaeBuilder;
+using Matrices;
 
 class Course
 {
@@ -17,7 +22,7 @@ class Course
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchMsrMul).Assembly).RunAll();
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchBicgStabPure).Assembly).RunAll();
         // SolveAndExportSomeSlae();
-        TestConvergence();
+        TestConvergence<DiagSlaeBuilder>();
         // TestParallelBuildV2();
         // TestHostVSOpenCLOnce();
         // TestAtomicAdd();
@@ -56,7 +61,7 @@ class Course
         
         { // ParallelV2 build
             prob.buildType = GlobalMatrixImplType.HostV2;
-            prob.Rebuild();
+            prob.Build<MsrSlaeBuilder>();
             
             sw.Start();
             var (ans, iters, rr) = prob.SolveBiCGStab();
@@ -72,7 +77,7 @@ class Course
         // return;
         { // ParallelOclV2 build
             prob.buildType = GlobalMatrixImplType.OpenCLV2;
-            prob.Rebuild();
+            prob.Build<MsrSlaeBuilder>();
             
             sw.Start();
             var (ans, iters, rr) = prob.SolveBiCGStab();
@@ -168,7 +173,7 @@ class Course
             { // Classic Parallel build
                 var sw = Stopwatch.StartNew();
                 prob.buildType = GlobalMatrixImplType.HostParallel;
-                prob.Rebuild();
+                prob.Build<MsrSlaeBuilder>();
                 sw.Stop();
                 Console.WriteLine($"(build time {sw.ElapsedMilliseconds}ms)");
     
@@ -189,7 +194,7 @@ class Course
             { // ParallelOclV2 build
                 var sw = Stopwatch.StartNew();
                 prob.buildType = GlobalMatrixImplType.OpenCLV2;
-                prob.Rebuild();
+                prob.Build<MsrSlaeBuilder>();
                 sw.Stop();
                 Console.WriteLine($"(build time {sw.ElapsedMilliseconds}ms)");
 
@@ -209,7 +214,7 @@ class Course
             { // ParallelOclV2 build
                 var sw = Stopwatch.StartNew();
                 prob.buildType = GlobalMatrixImplType.OpenCL;
-                prob.Rebuild();
+                prob.Build<MsrSlaeBuilder>();
                 sw.Stop();
                 Console.WriteLine($"(build time: {sw.ElapsedMilliseconds}ms)");
 
@@ -234,7 +239,7 @@ class Course
         { // Classic Parallel build
             var sw = Stopwatch.StartNew();
             prob.buildType = GlobalMatrixImplType.HostParallel;
-            prob.Rebuild();
+            prob.Build<MsrSlaeBuilder>();
             sw.Stop();
             Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
 
@@ -251,7 +256,7 @@ class Course
         { // Classic Parallel build
             var sw = Stopwatch.StartNew();
             prob.buildType = GlobalMatrixImplType.Host;
-            prob.Rebuild();
+            prob.Build<MsrSlaeBuilder>();
             sw.Stop();
             Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
 
@@ -264,7 +269,7 @@ class Course
         { // ParallelV2 build
             var sw = Stopwatch.StartNew();
             prob.buildType = GlobalMatrixImplType.HostV2;
-            prob.Rebuild();
+            prob.Build<MsrSlaeBuilder>();
             sw.Stop();
             Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
             
@@ -278,7 +283,7 @@ class Course
         { // ParallelOclV2 build
             var sw = Stopwatch.StartNew();
             prob.buildType = GlobalMatrixImplType.OpenCLV2;
-            prob.Rebuild();
+            prob.Build<MsrSlaeBuilder>();
             sw.Stop();
             Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
             
@@ -295,7 +300,7 @@ class Course
         { // ParallelOclV2 build
             var sw = Stopwatch.StartNew();
             prob.buildType = GlobalMatrixImplType.OpenCL;
-            prob.Rebuild();
+            prob.Build<MsrSlaeBuilder>();
             sw.Stop();
             Console.WriteLine($"(build time: {sw.ElapsedMilliseconds}ms)");
             
@@ -306,7 +311,8 @@ class Course
         
     }
 
-    static void TestConvergence()
+    static void TestConvergence<T>()
+    where T: ISlaeBuilder
     {
         var sw_bicg = new Stopwatch();
         var sw_glob = new Stopwatch();
@@ -315,12 +321,11 @@ class Course
         void _TestBicgOclBatch(ProblemLine prob)
         {
             Console.WriteLine("n sw_glob err iters discrep total_time(ms) kerns(ms) pci_io(ms)");
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 3; i++)
             {
-                // TODO: подразумевается подсчёт времени, потраченного на сборку матрицы
-                // но считается дробление, которое включает в себя ещё другие операции
-                sw_glob.Start();
                 prob.MeshDouble();
+                sw_glob.Start();
+                prob.Build<T>();
                 sw_glob.Stop();
 
                 sw_bicg.Start();
@@ -342,10 +347,11 @@ class Course
         void _TestBicgHostBatch(ProblemLine prob)
         {
             Console.WriteLine("n sw_glob err iters discrep total_time(ms)");
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 3; i++)
             {
-                sw_glob.Start();
                 prob.MeshDouble();
+                sw_glob.Start();
+                prob.Build<T>();
                 sw_glob.Stop();
 
                 sw_bicg.Start();
