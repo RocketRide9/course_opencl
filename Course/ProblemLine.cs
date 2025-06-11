@@ -63,6 +63,11 @@ class ProblemLine {
 
         json = File.ReadAllText(Path.Combine(taskFolder, "RefineParams.json"));
         _refineParams = JsonSerializer.Deserialize<RefineParams>(json, options)!;
+        if (_refineParams.XSplitCount.Sum() <= 1)
+        {
+            throw new Exception("Диагональный формат хранения матрицы накладывает ограничение на " +
+                "минимальный размер сетки по оси x");
+        }
 
         _computationalDomain = ReadDomains(taskFolder);
         _boundaryConditions = ReadConditions(taskFolder);

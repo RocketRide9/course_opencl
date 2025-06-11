@@ -201,7 +201,6 @@ public class BicgStabHost
         matrix.Mul(x, t);
         _b.CopyTo(r);
         Axpy(-1, t, r);
-        // BLAS.axpy(_n, -1, t, r);
         // 2.
         r.CopyTo(r_hat);
         // 3.

@@ -1,5 +1,7 @@
 using Real = double;
 
+using System.Collections.Concurrent;
+
 using Types;
 
 namespace Matrices;
@@ -26,7 +28,7 @@ public class DiagMatrix : Matrix
     // то Gap == 1.
     public int Gap;
     
-    int Matrix.Size => Di.Length;
+    public int Size => Di.Length;
     Span<Real> Matrix.Di => Di;
 
     public SparkAlgos.Types.Matrix GetComputeMatrix()
@@ -44,34 +46,70 @@ public class DiagMatrix : Matrix
             Gap = Gap,
         });
     }
-
-    void Matrix.Mul(ReadOnlySpan<Real> vec, Span<Real> res)
+    
+    public IEnumerable<Real> FlatNonZero()
     {
-        for (int i = 0; i < vec.Length; i++)
+        for (int i = 0; i < Size; i++)
         {
-            Real dot = 0;
-            
             int t = i - 3 - Gap;
-            if (t >= 0) dot += Ld3[t] * vec[t];
+            if (t >= 0 && Ld3[t] != 0) yield return Ld3[t];
             t = i - 2 - Gap;
-            if (t >= 0) dot += Ld2[t] * vec[t];
+            if (t >= 0 && Ld2[t] != 0) yield return Ld2[t];
             t = i - 1 - Gap;
-            if (t >= 0) dot += Ld1[t] * vec[t];
+            if (t >= 0 && Ld1[t] != 0) yield return Ld1[t];
             t = i - 1;
-            if (t >= 0) dot += Ld0[t] * vec[t];
-            
-            dot += Di[i] * vec[i];
+            if (t >= 0 && Ld0[t] != 0) yield return Ld0[t];
+
+            yield return Di[i];
 
             t = i+1;
-            if (t < vec.Length) dot += Rd0[i] * vec[t];
+            if (t < Size && Rd0[i] != 0) yield return Rd0[i];
             t = i+1+Gap;
-            if (t < vec.Length) dot += Rd1[i] * vec[i+1+Gap];
+            if (t < Size && Rd1[i] != 0) yield return Rd1[i];
             t = i+2+Gap;
-            if (t < vec.Length) dot += Rd2[i] * vec[i+2+Gap];
+            if (t < Size && Rd2[i] != 0) yield return Rd2[i];
             t = i+3+Gap;
-            if (t < vec.Length) dot += Rd3[i] * vec[i+3+Gap];
-            
-            res[i] = dot;
+            if (t < Size && Rd3[i] != 0) yield return Rd3[i];   
+        }
+    }
+
+    public unsafe void Mul(ReadOnlySpan<Real> vec, Span<Real> res)
+    {
+        var partitioner = Partitioner.Create(0, Size);
+        fixed(Real* _p_v = vec)
+        fixed(Real* _p_res = res)
+        {
+        var p_v = _p_v;
+        var p_res = _p_res;
+        Parallel.ForEach(partitioner, (range, state) =>
+        {
+            for (int i = range.Item1; i < range.Item2; i++)
+            {
+                Real dot = 0;
+                
+                int t = i - 3 - Gap;
+                if (t >= 0) dot += Ld3[t] * p_v[t];
+                t = i - 2 - Gap;
+                if (t >= 0) dot += Ld2[t] * p_v[t];
+                t = i - 1 - Gap;
+                if (t >= 0) dot += Ld1[t] * p_v[t];
+                t = i - 1;
+                if (t >= 0) dot += Ld0[t] * p_v[t];
+                
+                dot += Di[i] * p_v[i];
+    
+                t = i+1;
+                if (t < Size) dot += Rd0[i] * p_v[t];
+                t = i+1+Gap;
+                if (t < Size) dot += Rd1[i] * p_v[t];
+                t = i+2+Gap;
+                if (t < Size) dot += Rd2[i] * p_v[t];
+                t = i+3+Gap;
+                if (t < Size) dot += Rd3[i] * p_v[t];
+                
+                p_res[i] = dot;
+            }
+        });
         }
     }
 }

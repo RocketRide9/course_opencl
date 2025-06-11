@@ -12,9 +12,9 @@ using Types;
 namespace SlaeBuilder;
 using static Shared;
 
-class DiagSlaeBuilder : ISlaeBuilder
+class SymDiagSlaeBuilder : ISlaeBuilder
 {
-    DiagMatrix _matrix;
+    SymDiagMatrix _matrix;
     Real[] _b = [];
 
     readonly RectMesh _mesh;
@@ -23,15 +23,15 @@ class DiagSlaeBuilder : ISlaeBuilder
 
     readonly TaskFuncs _funcs;
 
-    public DiagSlaeBuilder(RectMesh mesh, TaskFuncs funcs)
+    public SymDiagSlaeBuilder(RectMesh mesh, TaskFuncs funcs)
     {
         _mesh = mesh;
-        _matrix = new DiagMatrix();
+        _matrix = new SymDiagMatrix();
         _funcs = funcs;
     }
 
     public static ISlaeBuilder Construct(RectMesh mesh, TaskFuncs funcs)
-        => new DiagSlaeBuilder(mesh, funcs);
+        => new SymDiagSlaeBuilder(mesh, funcs);
 
     public (Matrix, Real[]) Build()
     {
@@ -54,15 +54,10 @@ class DiagSlaeBuilder : ISlaeBuilder
 
         _matrix.Di = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
 
-        _matrix.Ld0 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
-        _matrix.Ld1 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
-        _matrix.Ld2 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
-        _matrix.Ld3 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
-
-        _matrix.Rd0 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
-        _matrix.Rd1 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
-        _matrix.Rd2 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
-        _matrix.Rd3 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
+        _matrix.d0 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
+        _matrix.d1 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
+        _matrix.d2 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
+        _matrix.d3 = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
 
         _b = Enumerable.Repeat((Real)0, _mesh.nodesCount).ToArray();
     }
@@ -88,59 +83,38 @@ class DiagSlaeBuilder : ISlaeBuilder
 #if true
             /* Гауссово исключение столбца */
             t = m-3-_matrix.Gap;
-            if (t >= 0) _b[t] -= b * _matrix.Rd3[t];
+            if (t >= 0) _b[t] -= b * _matrix.d3[t];
             t = m-2-_matrix.Gap;
-            if (t >= 0) _b[t] -= b * _matrix.Rd2[t];
+            if (t >= 0) _b[t] -= b * _matrix.d2[t];
             t = m-1-_matrix.Gap;
-            if (t >= 0) _b[t] -= b * _matrix.Rd1[t];
+            if (t >= 0) _b[t] -= b * _matrix.d1[t];
             t = m-1;
-            if (t >= 0) _b[t] -= b * _matrix.Rd0[t];
+            if (t >= 0) _b[t] -= b * _matrix.d0[t];
             
             t = m+1;
-            if (t < _matrix.Size) _b[t] -= b * _matrix.Ld0[m];
+            if (t < _matrix.Size) _b[t] -= b * _matrix.d0[m];
             t = m+1+_matrix.Gap;
-            if (t < _matrix.Size) _b[t] -= b * _matrix.Ld1[m];
+            if (t < _matrix.Size) _b[t] -= b * _matrix.d1[m];
             t = m+2+_matrix.Gap;
-            if (t < _matrix.Size) _b[t] -= b * _matrix.Ld2[m];
+            if (t < _matrix.Size) _b[t] -= b * _matrix.d2[m];
             t = m+3+_matrix.Gap;
-            if (t < _matrix.Size) _b[t] -= b * _matrix.Ld3[m];
+            if (t < _matrix.Size) _b[t] -= b * _matrix.d3[m];
 #endif
 
-
             /* Обнуление строки и столбца */
-            _matrix.Rd3[m] = 0;
-            _matrix.Rd2[m] = 0;
-            _matrix.Rd1[m] = 0;
-            _matrix.Rd0[m] = 0;
-            _matrix.Ld3[m] = 0;
-            _matrix.Ld2[m] = 0;
-            _matrix.Ld1[m] = 0;
-            _matrix.Ld0[m] = 0;
+            _matrix.d3[m] = 0;
+            _matrix.d2[m] = 0;
+            _matrix.d1[m] = 0;
+            _matrix.d0[m] = 0;
 
             t = m - 3 - _matrix.Gap;
-            if (t >= 0)
-            {
-                _matrix.Ld3[t] = 0;
-                _matrix.Rd3[t] = 0;
-            }
+            if (t >= 0) _matrix.d3[t] = 0;
             t = m - 2 - _matrix.Gap;
-            if (t >= 0) 
-            {
-                _matrix.Ld2[t] = 0;
-                _matrix.Rd2[t] = 0;
-            }
+            if (t >= 0) _matrix.d2[t] = 0;
             t = m - 1 - _matrix.Gap;
-            if (t >= 0) 
-            {
-                _matrix.Ld1[t] = 0;
-                _matrix.Rd1[t] = 0;
-            }
+            if (t >= 0) _matrix.d1[t] = 0;
             t = m - 1;
-            if (t >= 0) 
-            {
-                _matrix.Ld0[t] = 0;
-                _matrix.Rd0[t] = 0;
-            }
+            if (t >= 0) _matrix.d0[t] = 0;
         }
         
         if (x1 == x2)
@@ -251,8 +225,7 @@ class DiagSlaeBuilder : ISlaeBuilder
                 _matrix.Di[m[0]] += localA[0, 0];
                 _matrix.Di[m[1]] += localA[1, 1];
 
-                _matrix.Rd2[m[0]] += localA[0, 1];
-                _matrix.Ld2[m[0]] += localA[1, 0];
+                _matrix.d2[m[0]] += localA[0, 1];
             }
         }
         else if (y1 == y2)
@@ -278,8 +251,7 @@ class DiagSlaeBuilder : ISlaeBuilder
                 _matrix.Di[m[0]] += localA[0, 0];
                 _matrix.Di[m[1]] += localA[1, 1];
 
-                _matrix.Rd0[m[0]] += localA[0, 1];
-                _matrix.Ld0[m[0]] += localA[1, 0];
+                _matrix.d0[m[0]] += localA[0, 1];
             }
         }
         else
@@ -607,28 +579,23 @@ class DiagSlaeBuilder : ISlaeBuilder
                 int anchor = yi * _mesh.X.Length + xi;
 
                 Real Mat(int i, int j)
-                    => l_avg / 6 * (hy / hx * LocalG1[i, j] + hx / hy * LocalG2[i, j])
-                     + g_avg / 36 * hx * hy * LocalM[i, j];
-                
+                {
+                    return l_avg / 6 * (hy / hx * LocalG1[i, j] + hx / hy * LocalG2[i, j])
+                         + g_avg / 36 * hx * hy * LocalM[i, j];
+                }
 
                 _matrix.Di[anchor] += Mat(0, 0);
-                _matrix.Ld0[anchor] += Mat(0, 1);
-                _matrix.Rd0[anchor] += Mat(0, 1);
-                _matrix.Ld2[anchor] += Mat(0, 2);
-                _matrix.Rd2[anchor] += Mat(0, 2);
-                _matrix.Ld3[anchor] += Mat(0, 3);
-                _matrix.Rd3[anchor] += Mat(0, 3);
+                _matrix.d0[anchor] += Mat(0, 1);
+                _matrix.d2[anchor] += Mat(0, 2);
+                _matrix.d3[anchor] += Mat(0, 3);
 
                 _matrix.Di[anchor + 1] += Mat(1, 1);
-                _matrix.Ld1[anchor + 1] += Mat(1, 2);
-                _matrix.Rd1[anchor + 1] += Mat(1, 2);
-                _matrix.Ld2[anchor + 1] += Mat(1, 3);
-                _matrix.Rd2[anchor + 1] += Mat(1, 3);
+                _matrix.d1[anchor + 1] += Mat(1, 2);
+                _matrix.d2[anchor + 1] += Mat(1, 3);
 
                 var a2 = anchor + _mesh.X.Length;
                 _matrix.Di[a2] += Mat(2, 2);
-                _matrix.Ld0[a2] += Mat(2, 3);
-                _matrix.Rd0[a2] += Mat(2, 3);
+                _matrix.d0[a2] += Mat(2, 3);
 
                 _matrix.Di[a2 + 1] += Mat(3, 3);
 
@@ -718,23 +685,17 @@ class DiagSlaeBuilder : ISlaeBuilder
 
 
                     Add(ref _matrix.Di[anchor], Mat(0, 0));
-                    Add(ref _matrix.Ld0[anchor], Mat(0, 1));
-                    Add(ref _matrix.Rd0[anchor], Mat(0, 1));
-                    Add(ref _matrix.Ld2[anchor], Mat(0, 2));
-                    Add(ref _matrix.Rd2[anchor], Mat(0, 2));
-                    Add(ref _matrix.Ld3[anchor], Mat(0, 3));
-                    Add(ref _matrix.Rd3[anchor], Mat(0, 3));
+                    Add(ref _matrix.d0[anchor], Mat(0, 1));
+                    Add(ref _matrix.d2[anchor], Mat(0, 2));
+                    Add(ref _matrix.d3[anchor], Mat(0, 3));
 
                     Add(ref _matrix.Di[anchor + 1], Mat(1, 1));
-                    Add(ref _matrix.Ld1[anchor + 1], Mat(1, 2));
-                    Add(ref _matrix.Rd1[anchor + 1], Mat(1, 2));
-                    Add(ref _matrix.Ld2[anchor + 1], Mat(1, 3));
-                    Add(ref _matrix.Rd2[anchor + 1], Mat(1, 3));
+                    Add(ref _matrix.d1[anchor + 1], Mat(1, 2));
+                    Add(ref _matrix.d2[anchor + 1], Mat(1, 3));
 
                     var a2 = anchor + _mesh.X.Length;
                     Add(ref _matrix.Di[a2], Mat(2, 2));
-                    Add(ref _matrix.Ld0[a2], Mat(2, 3));
-                    Add(ref _matrix.Rd0[a2], Mat(2, 3));
+                    Add(ref _matrix.d0[a2], Mat(2, 3));
 
                     Add(ref _matrix.Di[a2 + 1], Mat(3, 3));
 

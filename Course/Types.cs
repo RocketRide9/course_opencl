@@ -10,4 +10,6 @@ public interface Matrix
 
     SparkAlgos.Types.Matrix GetComputeMatrix();
     void Mul(ReadOnlySpan<Real> vec, Span<Real> res);
+    // не нулевый, потому что так проще
+    IEnumerable<Real> FlatNonZero();
 }

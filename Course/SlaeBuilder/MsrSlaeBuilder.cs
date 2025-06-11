@@ -14,8 +14,8 @@ using static Shared;
 
 class MsrSlaeBuilder : ISlaeBuilder
 {
-    MsrMatrix _slae;
-    Real[] _b;
+    MsrMatrix _matrix;
+    Real[] _b = [];
 
     readonly RectMesh _mesh;
     public RectMesh Mesh { get => _mesh; }
@@ -26,7 +26,7 @@ class MsrSlaeBuilder : ISlaeBuilder
     public MsrSlaeBuilder(RectMesh mesh, TaskFuncs funcs)
     {
         _mesh = mesh;
-        _slae = new MsrMatrix();
+        _matrix = new MsrMatrix();
         _funcs = funcs;
     }
 
@@ -35,20 +35,26 @@ class MsrSlaeBuilder : ISlaeBuilder
 
     public (Matrix, Real[]) Build()
     {
+        var sw = Stopwatch.StartNew();
         GlobalMatrixInit();
-        GlobalMatrixBuild();
-        BoundaryConditionsApply();
+        Console.WriteLine($"Init: {sw.ElapsedMilliseconds}");
 
-        return (_slae, _b);
+        GlobalMatrixBuild();
+        
+        sw.Restart();
+        BoundaryConditionsApply();
+        Console.WriteLine($"Conds: {sw.ElapsedMilliseconds}");
+
+        return (_matrix, _b);
     }
 
     void GlobalMatrixInit()
     {
         GlobalMatrixPortraitCompose();
 
-        _slae.Elems = Enumerable.Repeat((Real)0, _slae.Ja.Length).ToArray();
-        _slae.Di = Enumerable.Repeat((Real)0, _slae.Ia.Length - 1).ToArray();
-        _b = Enumerable.Repeat((Real)0, _slae.Ia.Length - 1).ToArray();
+        _matrix.Elems = Enumerable.Repeat((Real)0, _matrix.Ja.Length).ToArray();
+        _matrix.Di = Enumerable.Repeat((Real)0, _matrix.Ia.Length - 1).ToArray();
+        _b = Enumerable.Repeat((Real)0, _matrix.Ia.Length - 1).ToArray();
     }
 
     void BoundaryConditionType1Apply(BoundaryCondition bc)
@@ -68,12 +74,14 @@ class MsrSlaeBuilder : ISlaeBuilder
             {
                 var m = yi * _mesh.X.Length + x1;
                 _b[m] = _funcs.Ug(num, _mesh.X[x1], _mesh.Y[yi]);
-                _slae.Di[m] = 1;
-                int ig0 = _slae.Ia[m];
-                int ig1 = _slae.Ia[m + 1];
+                _matrix.Di[m] = 1;
+
+                /* Обнуление строки */
+                int ig0 = _matrix.Ia[m];
+                int ig1 = _matrix.Ia[m + 1];
                 for (int j = ig0; j < ig1; j++)
                 {
-                    _slae.Elems[j] = 0;
+                    _matrix.Elems[j] = 0;
                 }
             }
         }
@@ -83,12 +91,14 @@ class MsrSlaeBuilder : ISlaeBuilder
             {
                 var m = y1 * _mesh.X.Length + xi;
                 _b[m] = _funcs.Ug(num, _mesh.X[xi], _mesh.Y[y1]);
-                _slae.Di[m] = 1;
-                int ig0 = _slae.Ia[m];
-                int ig1 = _slae.Ia[m + 1];
+                _matrix.Di[m] = 1;
+
+                /* Обнуление строки */
+                int ig0 = _matrix.Ia[m];
+                int ig1 = _matrix.Ia[m + 1];
                 for (int j = ig0; j < ig1; j++)
                 {
-                    _slae.Elems[j] = 0;
+                    _matrix.Elems[j] = 0;
                 }
             }
         }
@@ -179,13 +189,13 @@ class MsrSlaeBuilder : ISlaeBuilder
                 _b[m[0]] += localB[0];
                 _b[m[1]] += localB[1];
 
-                _slae.Di[m[0]] += localA[0, 0];
-                _slae.Di[m[1]] += localA[1, 1];
+                _matrix.Di[m[0]] += localA[0, 0];
+                _matrix.Di[m[1]] += localA[1, 1];
 
-                var res = LFind(_slae.Ja, what: m[1], start: _slae.Ia[m[0]]);
-                _slae.Elems[res] += localA[0, 1];
-                res = LFind(_slae.Ja, what: m[0], start: _slae.Ia[m[1]]);
-                _slae.Elems[res] += localA[1, 0];
+                var res = LFind(_matrix.Ja, what: m[1], start: _matrix.Ia[m[0]]);
+                _matrix.Elems[res] += localA[0, 1];
+                res = LFind(_matrix.Ja, what: m[0], start: _matrix.Ia[m[1]]);
+                _matrix.Elems[res] += localA[1, 0];
             }
         }
         else if (y1 == y2)
@@ -208,13 +218,13 @@ class MsrSlaeBuilder : ISlaeBuilder
                 _b[m[0]] += localB[0];
                 _b[m[1]] += localB[1];
 
-                _slae.Di[m[0]] += localA[0, 0];
-                _slae.Di[m[1]] += localA[1, 1];
+                _matrix.Di[m[0]] += localA[0, 0];
+                _matrix.Di[m[1]] += localA[1, 1];
 
-                var res = LFind(_slae.Ja, what: m[1], start: _slae.Ia[m[0]]);
-                _slae.Elems[res] += localA[0, 1];
-                res = LFind(_slae.Ja, what: m[0], start: _slae.Ia[m[1]]);
-                _slae.Elems[res] += localA[1, 0];
+                var res = LFind(_matrix.Ja, what: m[1], start: _matrix.Ia[m[0]]);
+                _matrix.Elems[res] += localA[0, 1];
+                res = LFind(_matrix.Ja, what: m[0], start: _matrix.Ia[m[1]]);
+                _matrix.Elems[res] += localA[1, 0];
             }
         }
         else
@@ -306,20 +316,20 @@ class MsrSlaeBuilder : ISlaeBuilder
             }
         }
 
-        _slae.Ia = new int[list.Length + 1];
-        _slae.Ia[0] = 0;
+        _matrix.Ia = new int[list.Length + 1];
+        _matrix.Ia[0] = 0;
         /* формирование массивов ig jg по списку list */
-        for (int i = 1; i < _slae.Ia.Length; i++)
+        for (int i = 1; i < _matrix.Ia.Length; i++)
         {
-            _slae.Ia[i] = _slae.Ia[i - 1] + list[i - 1].Count;
+            _matrix.Ia[i] = _matrix.Ia[i - 1] + list[i - 1].Count;
         }
-        _slae.Ja = new int[_slae.Ia[list.Length]];
+        _matrix.Ja = new int[_matrix.Ia[list.Length]];
         for (var i = 0; i < list.Length; i++)
         {
             var row = list[i].Order().ToArray();
-            for (int j = _slae.Ia[i]; j < _slae.Ia[i + 1]; j++)
+            for (int j = _matrix.Ia[i]; j < _matrix.Ia[i + 1]; j++)
             {
-                _slae.Ja[j] = row[j - _slae.Ia[i]];
+                _matrix.Ja[j] = row[j - _matrix.Ia[i]];
             }
         }
     }
@@ -346,7 +356,6 @@ class MsrSlaeBuilder : ISlaeBuilder
             return res / 4;
         }
 
-
         Span<Real> matc = stackalloc Real[8];
         for (int yi = 0; yi < _mesh.Y.Length; yi++)
         {
@@ -370,30 +379,30 @@ class MsrSlaeBuilder : ISlaeBuilder
                 int mr1 = -1;
                 int mr2 = -1;
 
-                int beg = _slae.Ia[targetNode];
-                int bound = _slae.Ia[targetNode + 1] - 1;
+                int beg = _matrix.Ia[targetNode];
+                int bound = _matrix.Ia[targetNode + 1] - 1;
 
                 // TODO: можно немного ускорить поиск за счёт перемещения левой границы поиска
                 // но возможно быстрее будет сделать простой линейный поиск вместо "быстрого"
                 // int curr = beg;
                 if (r0 >= 0)
                 {
-                    mr0 = LFind(_slae.Ja, r0, beg) - beg;
+                    mr0 = LFind(_matrix.Ja, r0, beg) - beg;
                 }
                 // else оставить -1, так как узел вышел за пределы матрицы
 
                 if (r1 % _mesh.X.Length == 0)
                 {
-                    mr1 = LFind(_slae.Ja, r1 + 1, beg) - 1 - beg;
+                    mr1 = LFind(_matrix.Ja, r1+1, beg) - 1 - beg;
                 }
                 else
                 {
-                    mr1 = LFind(_slae.Ja, r1 - 1, beg) - beg;
+                    mr1 = LFind(_matrix.Ja, r1-1, beg) - beg;
                 }
 
-                if (r2 < _slae.Di.Length)
+                if (r2 < _matrix.Di.Length)
                 {
-                    mr2 = LFind(_slae.Ja, r2, beg) - beg;
+                    mr2 = LFind(_matrix.Ja, r2, beg) - beg;
                 }
 
                 // Console.WriteLine("mr = {0}, {1}, {2}", mr0, mr1, mr2);
@@ -413,8 +422,8 @@ class MsrSlaeBuilder : ISlaeBuilder
 
                 if (dom1.HasValue)
                 {
-                    var x0 = _mesh.X[xi - 1];
-                    var y0 = _mesh.Y[yi - 1];
+                    var x0 = _mesh.X[xi-1];
+                    var y0 = _mesh.Y[yi-1];
                     var l_avg = GetLamdaAverage(dom1.Value, x0, y0, x1, y1);
                     var g_avg = GetGammaAverage(dom1.Value, x0, y0, x1, y1);
                     var hx0 = x1 - x0;
@@ -422,11 +431,11 @@ class MsrSlaeBuilder : ISlaeBuilder
 
                     matc[mr0 - 1] += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 0] + hx0 / hy0 * LocalG2[3, 0])
                         + g_avg / 36 * hx0 * hy0 * LocalM[3, 0];
-                    matc[mr0] += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 1] + hx0 / hy0 * LocalG2[3, 1])
+                    matc[mr0]     += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 1] + hx0 / hy0 * LocalG2[3, 1])
                         + g_avg / 36 * hx0 * hy0 * LocalM[3, 1];
-                    matc[mr1] += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 2] + hx0 / hy0 * LocalG2[3, 2])
+                    matc[mr1]     += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 2] + hx0 / hy0 * LocalG2[3, 2])
                         + g_avg / 36 * hx0 * hy0 * LocalM[3, 2];
-                    dic += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 3] + hx0 / hy0 * LocalG2[3, 3])
+                    dic           += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 3] + hx0 / hy0 * LocalG2[3, 3])
                         + g_avg / 36 * hx0 * hy0 * LocalM[3, 3];
 
                     Real f1 = _funcs.F(dom1.Value, x0, y0);
@@ -441,20 +450,20 @@ class MsrSlaeBuilder : ISlaeBuilder
 
                 if (dom2.HasValue)
                 {
-                    var x2 = _mesh.X[xi + 1];
-                    var y0 = _mesh.Y[yi - 1];
+                    var x2 = _mesh.X[xi+1];
+                    var y0 = _mesh.Y[yi-1];
                     var l_avg = GetLamdaAverage(dom2.Value, x1, y0, x2, y1);
                     var g_avg = GetGammaAverage(dom2.Value, x1, y0, x2, y1);
                     var hx1 = x2 - x1;
                     var hy0 = y1 - y0;
 
-                    matc[mr0] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 0] + hx1 / hy0 * LocalG2[2, 0])
+                    matc[mr0]   += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 0] + hx1 / hy0 * LocalG2[2, 0])
                         + g_avg / 36 * hx1 * hy0 * LocalM[2, 0];
-                    matc[mr0 + 1] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 1] + hx1 / hy0 * LocalG2[2, 1])
+                    matc[mr0+1] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 1] + hx1 / hy0 * LocalG2[2, 1])
                         + g_avg / 36 * hx1 * hy0 * LocalM[2, 1];
-                    dic += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 2] + hx1 / hy0 * LocalG2[2, 2])
+                    dic         += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 2] + hx1 / hy0 * LocalG2[2, 2])
                         + g_avg / 36 * hx1 * hy0 * LocalM[2, 2];
-                    matc[mr1 + 1] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 3] + hx1 / hy0 * LocalG2[2, 3])
+                    matc[mr1+1] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 3] + hx1 / hy0 * LocalG2[2, 3])
                         + g_avg / 36 * hx1 * hy0 * LocalM[2, 3];
 
                     Real f1 = _funcs.F(dom2.Value, x1, y0);
@@ -467,20 +476,20 @@ class MsrSlaeBuilder : ISlaeBuilder
 
                 if (dom3.HasValue)
                 {
-                    var x0 = _mesh.X[xi - 1];
-                    var y2 = _mesh.Y[yi + 1];
+                    var x0 = _mesh.X[xi-1];
+                    var y2 = _mesh.Y[yi+1];
                     var l_avg = GetLamdaAverage(dom3.Value, x0, y1, x1, y2);
                     var g_avg = GetGammaAverage(dom3.Value, x0, y1, x1, y2);
                     var hx0 = x1 - x0;
                     var hy1 = y2 - y1;
 
-                    matc[mr1] += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 0] + hx0 / hy1 * LocalG2[1, 0])
+                    matc[mr1]   += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 0] + hx0 / hy1 * LocalG2[1, 0])
                         + g_avg / 36 * hx0 * hy1 * LocalM[1, 0];
-                        dic += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 1] + hx0 / hy1 * LocalG2[1, 1])
+                    dic         += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 1] + hx0 / hy1 * LocalG2[1, 1])
                         + g_avg / 36 * hx0 * hy1 * LocalM[1, 1];
-                        matc[mr2 - 1] += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 2] + hx0 / hy1 * LocalG2[1, 2])
+                    matc[mr2-1] += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 2] + hx0 / hy1 * LocalG2[1, 2])
                         + g_avg / 36 * hx0 * hy1 * LocalM[1, 2];
-                        matc[mr2] += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 3] + hx0 / hy1 * LocalG2[1, 3])
+                    matc[mr2]   += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 3] + hx0 / hy1 * LocalG2[1, 3])
                         + g_avg / 36 * hx0 * hy1 * LocalM[1, 3];
 
                     Real f1 = _funcs.F(dom3.Value, x0, y1);
@@ -493,8 +502,8 @@ class MsrSlaeBuilder : ISlaeBuilder
 
                 if (dom4.HasValue)
                 {
-                    var x2 = _mesh.X[xi + 1];
-                    var y2 = _mesh.Y[yi + 1];
+                    var x2 = _mesh.X[xi+1];
+                    var y2 = _mesh.Y[yi+1];
                     var l_avg = GetLamdaAverage(dom4.Value, x1, y1, x2, y2);
                     var g_avg = GetGammaAverage(dom4.Value, x1, y1, x2, y2);
                     var hx1 = x2 - x1;
@@ -517,13 +526,13 @@ class MsrSlaeBuilder : ISlaeBuilder
                     bc += hx1 * hy1 / 36 * (4 * f1 + 2 * f2 + 2 * f3 + f4);
                 }
 
-                _slae.Di[targetNode] = dic;
+                _matrix.Di[targetNode] = dic;
                 _b[targetNode] = bc;
 
                 // перемещение строки в матрицу
                 for (int i = beg; i <= bound; i++)
                 {
-                    _slae.Elems[i] = matc[i - beg];
+                    _matrix.Elems[i] = matc[i - beg];
                 }
             }
         }
@@ -558,6 +567,7 @@ class MsrSlaeBuilder : ISlaeBuilder
         // csharp не нравится stackalloc в циклах
         Span<Real> localB = stackalloc Real[4];
         Span<int> m = stackalloc int[4];
+        var kernTime = Stopwatch.StartNew();
 
         for (int yi = 0; yi < _mesh.Y.Length - 1; yi++)
         {
@@ -613,48 +623,50 @@ class MsrSlaeBuilder : ISlaeBuilder
                 m[2] = (yi + 1) * _mesh.X.Length + xi;
                 m[3] = m[2] + 1;
 
-                // TODO: переписать на QFind или LFind
+                Real Mat(int i, int j)
+                {
+                    return l_avg / 6 * (hy / hx * LocalG1[i, j] + hx / hy * LocalG2[i, j])
+                         + g_avg / 36 * hx * hy * LocalM[i, j];
+                }
+
                 /* нахождение в ja индексов элементов в al/au, куда
                     нужно добавить элементы локальных матриц */
-                for (int i = 0; i < 4; i++)
-                {
-                    var v2 = l_avg / 6 * (hy / hx * LocalG1[i, i] + hx / hy * LocalG2[i, i])
-                        + g_avg / 36 * hx * hy * LocalM[i, i];
-                    _slae.Di[m[i]] += v2;
+                int a = _matrix.Ia[m[0]];
+                _matrix.Di[m[0]] += Mat(0, 0);
+                a = LFind(_matrix.Ja, m[1], a);
+                    _matrix.Elems[a] += Mat(0, 1);
+                a = LFind(_matrix.Ja, m[2], a);
+                    _matrix.Elems[a] += Mat(0, 2);
+                a = LFind(_matrix.Ja, m[3], a);
+                    _matrix.Elems[a] += Mat(0, 3);
 
-                    int beg = _slae.Ia[m[i]];
-                    for (int j = 0; j < 4; j++)
-                    {
-                        // TODO: пропуск
-                        if (i == j)
-                        {
-                            continue;
-                        }
-                        int end = _slae.Ia[m[i] + 1] - 1;
-                        while (beg < end)
-                        {
-                            int mid = (beg + end) / 2;
-                            if (m[j] > _slae.Ja[mid])
-                            {
-                                beg = mid + 1;
-                            }
-                            else
-                            {
-                                end = mid;
-                            }
-                        }
+                a = _matrix.Ia[m[1]];
+                a = LFind(_matrix.Ja, m[0], a);
+                    _matrix.Elems[a] += Mat(1, 0);
+                _matrix.Di[m[1]] += Mat(1, 1);
+                a = LFind(_matrix.Ja, m[2], a);
+                    _matrix.Elems[a] += Mat(1, 2);
+                a = LFind(_matrix.Ja, m[3], a);
+                    _matrix.Elems[a] += Mat(1, 3);
+                    
+                a = _matrix.Ia[m[2]];
+                a = LFind(_matrix.Ja, m[0], a);
+                    _matrix.Elems[a] += Mat(2, 0);
+                a = LFind(_matrix.Ja, m[1], a);
+                    _matrix.Elems[a] += Mat(2, 1);
+                _matrix.Di[m[2]] += Mat(2, 2);
+                a = LFind(_matrix.Ja, m[3], a);
+                    _matrix.Elems[a] += Mat(2, 3);
 
-                        if (_slae.Ja[beg] != m[j])
-                        {
-                            throw new Exception("Quick search failed");
-                        }
-
-                        v2 = l_avg / 6 * (hy / hx * LocalG1[i, j] + hx / hy * LocalG2[i, j])
-                            + g_avg / 36 * hx * hy * LocalM[i, j];
-                        _slae.Elems[beg] += v2;
-                        beg++;
-                    }
-                }
+                
+                a = _matrix.Ia[m[3]];
+                a = LFind(_matrix.Ja, m[0], a);
+                    _matrix.Elems[a] += Mat(3, 0);
+                a = LFind(_matrix.Ja, m[1], a);
+                    _matrix.Elems[a] += Mat(3, 1);
+                a = LFind(_matrix.Ja, m[2], a);
+                    _matrix.Elems[a] += Mat(3, 2);
+                _matrix.Di[m[3]] += Mat(3, 3);
 
                 /* добавление локальной правой части в слау */
                 for (int i = 0; i < 4; i++)
@@ -663,14 +675,16 @@ class MsrSlaeBuilder : ISlaeBuilder
                 }
             }
         }
+        
+        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
 
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
-        for (int i = 0; i < _slae.Di.Length; i++)
+        for (int i = 0; i < _matrix.Di.Length; i++)
         {
-            if (_slae.Di[i] == 0)
+            if (_matrix.Di[i] == 0)
             {
-                _slae.Di[i] = 1;
+                _matrix.Di[i] = 1;
             }
         }
     }
@@ -745,10 +759,10 @@ class MsrSlaeBuilder : ISlaeBuilder
                     {
                         var v2 = l_avg / 6 * (hy / hx * LocalG1[i, i] + hx / hy * LocalG2[i, i])
                             + g_avg / 36 * hx * hy * LocalM[i, i];
-                        Add(ref this._slae.Di[m[i]], v2);
+                        Add(ref this._matrix.Di[m[i]], v2);
                         // Slae.Di[m[i]] += v2;
 
-                        int beg = this._slae.Ia[m[i]];
+                        int beg = this._matrix.Ia[m[i]];
                         for (int j = 0; j < 4; j++)
                         {
                             // TODO: пропуск
@@ -756,11 +770,11 @@ class MsrSlaeBuilder : ISlaeBuilder
                             {
                                 continue;
                             }
-                            int end = this._slae.Ia[m[i] + 1] - 1;
+                            int end = this._matrix.Ia[m[i] + 1] - 1;
                             while (beg < end)
                             {
                                 int mid = (beg + end) / 2;
-                                if (m[j] > this._slae.Ja[mid])
+                                if (m[j] > this._matrix.Ja[mid])
                                 {
                                     beg = mid + 1;
                                 }
@@ -770,14 +784,14 @@ class MsrSlaeBuilder : ISlaeBuilder
                                 }
                             }
 
-                            if (this._slae.Ja[beg] != m[j])
+                            if (this._matrix.Ja[beg] != m[j])
                             {
                                 throw new Exception("Quick search failed");
                             }
 
                             v2 = l_avg / 6 * (hy / hx * LocalG1[i, j] + hx / hy * LocalG2[i, j])
                                 + g_avg / 36 * hx * hy * LocalM[i, j];
-                            Add(ref this._slae.Elems[beg], v2);
+                            Add(ref this._matrix.Elems[beg], v2);
                             // Slae.Mat[beg] += v2;
                             beg++;
                         }
@@ -797,11 +811,11 @@ class MsrSlaeBuilder : ISlaeBuilder
         Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
-        for (int i = 0; i < _slae.Di.Length; i++)
+        for (int i = 0; i < _matrix.Di.Length; i++)
         {
-            if (_slae.Di[i] == 0)
+            if (_matrix.Di[i] == 0)
             {
-                _slae.Di[i] = 1;
+                _matrix.Di[i] = 1;
             }
         }
     }
@@ -814,11 +828,11 @@ class MsrSlaeBuilder : ISlaeBuilder
             globalWork: new NDRange((nuint)Mesh.X.Length, (nuint)Mesh.Y.Length).PadTo(4),
             localWork: new NDRange(4, 4)
         );
-        var mat = new ComputeBuffer<Real>(_slae.Elems, BufferFlags.OnDevice);
-        var di = new ComputeBuffer<Real>(_slae.Di, BufferFlags.OnDevice);
+        var mat = new ComputeBuffer<Real>(_matrix.Elems, BufferFlags.OnDevice);
+        var di = new ComputeBuffer<Real>(_matrix.Di, BufferFlags.OnDevice);
         var b = new ComputeBuffer<Real>(_b, BufferFlags.OnDevice);
-        var ia = new ComputeBuffer<int>(_slae.Ia, BufferFlags.OnDevice);
-        var ja = new ComputeBuffer<int>(_slae.Ja, BufferFlags.OnDevice);
+        var ia = new ComputeBuffer<int>(_matrix.Ia, BufferFlags.OnDevice);
+        var ja = new ComputeBuffer<int>(_matrix.Ja, BufferFlags.OnDevice);
         var x_axis = new ComputeBuffer<Real>(Mesh.X, BufferFlags.OnDevice);
         var y_axis = new ComputeBuffer<Real>(Mesh.Y, BufferFlags.OnDevice);
 
@@ -837,17 +851,17 @@ class MsrSlaeBuilder : ISlaeBuilder
         kernCompose.Execute();
         Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
 
-        mat.DeviceReadTo(_slae.Elems);
-        di.DeviceReadTo(_slae.Di);
+        mat.DeviceReadTo(_matrix.Elems);
+        di.DeviceReadTo(_matrix.Di);
         b.DeviceReadTo(_b);
 
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
-        for (int i = 0; i < _slae.Di.Length; i++)
+        for (int i = 0; i < _matrix.Di.Length; i++)
         {
-            if (_slae.Di[i] == 0)
+            if (_matrix.Di[i] == 0)
             {
-                _slae.Di[i] = 1;
+                _matrix.Di[i] = 1;
             }
         }
     }
@@ -860,11 +874,11 @@ class MsrSlaeBuilder : ISlaeBuilder
             globalWork: new NDRange((nuint)Mesh.X.Length, (nuint)Mesh.Y.Length).PadTo(4),
             localWork: new NDRange(4, 4)
         );
-        var mat = new ComputeBuffer<Real>(_slae.Elems, BufferFlags.OnDevice);
-        var di = new ComputeBuffer<Real>(_slae.Di, BufferFlags.OnDevice);
+        var mat = new ComputeBuffer<Real>(_matrix.Elems, BufferFlags.OnDevice);
+        var di = new ComputeBuffer<Real>(_matrix.Di, BufferFlags.OnDevice);
         var b = new ComputeBuffer<Real>(_b, BufferFlags.OnDevice);
-        var ia = new ComputeBuffer<int>(_slae.Ia, BufferFlags.OnDevice);
-        var ja = new ComputeBuffer<int>(_slae.Ja, BufferFlags.OnDevice);
+        var ia = new ComputeBuffer<int>(_matrix.Ia, BufferFlags.OnDevice);
+        var ja = new ComputeBuffer<int>(_matrix.Ja, BufferFlags.OnDevice);
         var x_axis = new ComputeBuffer<Real>(Mesh.X, BufferFlags.OnDevice);
         var y_axis = new ComputeBuffer<Real>(Mesh.Y, BufferFlags.OnDevice);
 
@@ -883,18 +897,18 @@ class MsrSlaeBuilder : ISlaeBuilder
         kernCompose.Execute();
         Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
 
-        mat.DeviceReadTo(_slae.Elems);
-        di.DeviceReadTo(_slae.Di);
+        mat.DeviceReadTo(_matrix.Elems);
+        di.DeviceReadTo(_matrix.Di);
         b.DeviceReadTo(_b);
 
         // TODO: это легко сделать в OpenCL
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
-        for (int i = 0; i < _slae.Di.Length; i++)
+        for (int i = 0; i < _matrix.Di.Length; i++)
         {
-            if (_slae.Di[i] == 0)
+            if (_matrix.Di[i] == 0)
             {
-                _slae.Di[i] = 1;
+                _matrix.Di[i] = 1;
             }
         }
     }

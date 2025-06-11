@@ -14,7 +14,7 @@ public class MsrMatrix : Matrix
     public int[] Ia = [];
     public int[] Ja = [];
 
-    int Matrix.Size => Di.Length;
+    public int Size => Di.Length;
     Span<Real> Matrix.Di => Di;
 
     public SparkAlgos.Types.Matrix GetComputeMatrix()
@@ -28,8 +28,33 @@ public class MsrMatrix : Matrix
         });
     }
 
+    public IEnumerable<Real> FlatNonZero()
+    {
+        for (int i = 0; i < Ia.Length - 1; i++)
+        {
+            int start = Ia[i];
+            int stop = Ia[i + 1];
+
+            int curr_a = start;
+
+            for (_ = 0; curr_a < stop; curr_a++)
+            {
+                if (Ja[curr_a] > i) {
+                    break;
+                } else {
+                    if (Elems[curr_a] != 0) yield return Elems[curr_a];
+                }
+            }
+            yield return Di[i];
+            for (_ = 0; curr_a < stop; curr_a++)
+            {
+                if (Elems[curr_a] != 0) yield return Elems[curr_a];
+            }
+        }
+    }
+
     // TODO: можно переписать на Array<> так как эта функция теперь здесь
-    unsafe void Matrix.Mul(ReadOnlySpan<Real> vec, Span<Real> res)
+    public unsafe void Mul(ReadOnlySpan<Real> vec, Span<Real> res)
     {
 #if HOST_PARALLEL
         var partitioner = Partitioner.Create(0, Ia.Length);
