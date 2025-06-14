@@ -1,5 +1,4 @@
 #define real double
-#define real4 float4
 
 #ifdef __MESA__
 #include "FEMShared.cl"
@@ -39,23 +38,6 @@ constant real localM[4][4] = {
     {2, 1, 4, 2},
     {1, 2, 2, 4},
 };
-#endif
-
-void __attribute__((always_inline))
-atomicAdd_g(volatile global float *addr, const float val)
-{
-    union {
-        uint u32;
-        float f32;
-    } next, expected, current;
-    current.f32 = *addr;
-    do {
-        next.f32 = (expected.f32 = current.f32) + val;
-        current.u32 = atom_cmpxchg(
-            (volatile global uint *)addr,
-            expected.u32, next.u32);
-    } while( current.u32 != expected.u32 );
-}
 
 /*
 void __attribute__((always_inline))
@@ -76,6 +58,44 @@ atomicAdd_g2(volatile global double *addr, const float val)
 }
 */
 
+#if false
+void __attribute__((always_inline))
+atomicAdd_gf(volatile global float *addr, const float val)
+{
+    union {
+        uint u32;
+        float f32;
+    } next, expected, current;
+    current.f32 = *addr;
+    do {
+        next.f32 = (expected.f32 = current.f32) + val;
+        current.u32 = atom_cmpxchg(
+            (volatile global uint *)addr,
+            expected.u32, next.u32);
+    } while( current.u32 != expected.u32 );
+}
+#else 
+void __attribute__((always_inline))
+atomicAdd_g(volatile __global double *addr, double val)
+{
+    union {
+        unsigned long u64;
+        double f64;
+    } next, expected, current;
+    current.f64 = *addr;
+    do {
+        expected.f64 = current.f64;
+        next.f64 = expected.f64 + val;
+        current.u64 = atom_cmpxchg(
+            (volatile global unsigned long *)addr,
+            expected.u64, next.u64);
+    } while( current.u64 != expected.u64 );
+}
+#endif
+
+#endif
+
+
 // test
 kernel void
 add_to_zero(volatile global real *zero)
@@ -87,33 +107,37 @@ add_to_zero(volatile global real *zero)
     atomicAdd_g(zero, tmp);
 }
 
-#if false
-inline
-void atomicAdd_g_f(volatile __global double *addr, float val)
+void __attribute__((always_inline))
+fill_mat(real mat[4][4], real l_avg, real g_avg, real hx, real hy)
 {
-    union {
-        unsigned long u64;
-        double f64;
-    } next, expected, current;
-    current.f64 = *addr;
-    do {
-        expected.f64 = current.f64;
-        next.f64 = expected.f64 + val;
-        current.u64 = atomic_cmpxchg(
-            (volatile global unsigned long *)addr,
-            expected.u64, next.u64);
-    } while( current.u64 != expected.u64 );
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            mat[i][j] = l_avg / 6 * (hy / hx * localG1[i][j] + hx / hy * localG2[i][j])
+                     + g_avg / 36 * hx * hy * localM[i][j];
+        }
+    }
 }
-#endif
 
 kernel void global_matrix_compose(
     // матрица
-    volatile global real *mat,
+    volatile global real *ld3,
+    volatile global real *ld2,
+    volatile global real *ld1,
+    volatile global real *ld0,
+    
     volatile global real *di,
+    
+    volatile global real *rd0,
+    volatile global real *rd1,
+    volatile global real *rd2,
+    volatile global real *rd3,
+
     volatile global real *b,
-    global const int *ia,
-    global const int *ja,
+
     const int n,
+    const int gap,
     // сетка
     global const real *axis_x,
     const int xn,
@@ -128,12 +152,6 @@ kernel void global_matrix_compose(
 
     // TODO: изменить позже
     int subDom = 0;
-
-    private int m[4];
-    m[0] = yi * xn + xi;
-    m[1] = m[0] + 1;
-    m[2] = (yi + 1) * xn + xi;
-    m[3] = m[2] + 1;
 
     real x0 = axis_x[xi];
     real x1 = axis_x[xi + 1];
@@ -162,51 +180,39 @@ kernel void global_matrix_compose(
                + gamma(subDom, x0, y1) + gamma(subDom, x1, y1);
     g_avg /= 4.;
 
-    for (int i = 0; i < 4; i++)
-    {
-        real tmp = l_avg/6. * (hy/hx * localG1[i][i] + hx/hy * localG2[i][i])
-                 + g_avg/36. * hx*hy * localM[i][i];
+    int anchor = yi * xn + xi;
 
-        atomicAdd_g(&di[m[i]], tmp);
-        // di[m[i]] += tmp;
+    real mat[4][4];
+    fill_mat(mat, l_avg, g_avg, hx, hy);
 
-        int beg = ia[m[i]];
-        for (int j = 0; j < 4; j++)
-        {
-            if (i == j)
-            {
-                continue;
-            }
-            int end = ia[m[i] + 1] - 1;
-            while (beg < end)
-            {
-                int mid = (beg + end) / 2;
-                if (m[j] > ja[mid])
-                {
-                    beg = mid + 1;
-                }
-                else
-                {
-                    end = mid;
-                }
-            }
+    atomicAdd_g(&di[anchor],  mat[0][0]);
+    atomicAdd_g(&ld0[anchor], mat[0][1]);
+    atomicAdd_g(&rd0[anchor], mat[0][1]);
+    atomicAdd_g(&ld2[anchor], mat[0][2]);
+    atomicAdd_g(&rd2[anchor], mat[0][2]);
+    atomicAdd_g(&ld3[anchor], mat[0][3]);
+    atomicAdd_g(&rd3[anchor], mat[0][3]);
 
-            if (ja[beg] != m[j])
-            {
-                // printf("Quick search failed\n");
-            }
+    atomicAdd_g(&di[anchor + 1], mat[1][1]);
+    atomicAdd_g(&ld1[anchor + 1], mat[1][2]);
+    atomicAdd_g(&rd1[anchor + 1], mat[1][2]);
+    atomicAdd_g(&ld2[anchor + 1], mat[1][3]);
+    atomicAdd_g(&rd2[anchor + 1], mat[1][3]);
 
-            tmp = l_avg/6. * (hy/hx * localG1[i][j] + hx/hy * localG2[i][j])
-                + g_avg/36. * hx*hy * localM[i][j];
-            atomicAdd_g(&mat[beg], tmp);
-            // mat[beg] += tmp;
-            beg++;
-        }
-    }
+    int a2 = anchor + xn;
+    atomicAdd_g(&di[a2], mat[2][2]);
+    atomicAdd_g(&ld0[a2], mat[2][3]);
+    atomicAdd_g(&rd0[a2], mat[2][3]);
+
+    atomicAdd_g(&di[a2 + 1], mat[3][3]);
+
+    atomicAdd_g(&b[anchor], localB[0]);
+    atomicAdd_g(&b[anchor + 1], localB[1]);
+    atomicAdd_g(&b[a2], localB[2]);
+    atomicAdd_g(&b[a2 + 1], localB[3]);
 
     for (int i = 0; i < 4; i++)
     {
-        atomicAdd_g(&b[m[i]], localB[i]);
         // b[m[i]] += localB[i];
     }
 }

@@ -18,17 +18,23 @@
 
   <PropertyGroup>
     <!-- Use double precision floating point numbers -->
-    <DefineConstants>USE_DOUBLE</DefineConstants>
+    <DefineConstants>USE_DOUBLE;TRACE</DefineConstants>
   </PropertyGroup>
   
   <ItemGroup>
-    <None Update="Kernels.cl">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Update="FEMShared.cl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="ComposeV2.cl">
+    <None Update="SlaeBuilder/MsrCompose.cl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="SlaeBuilder/MsrComposeV2.cl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="SlaeBuilder/DiagCompose.cl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="SlaeBuilder/SymDiagCompose.cl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="ProblemParams.json">

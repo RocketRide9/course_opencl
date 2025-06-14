@@ -35,15 +35,21 @@ class MsrSlaeBuilder : ISlaeBuilder
 
     public (Matrix, Real[]) Build()
     {
+        Trace.WriteLine($"Msr Builder: {GlobalMatrixImpl}");
+
+        Trace.Indent();
         var sw = Stopwatch.StartNew();
         GlobalMatrixInit();
-        Console.WriteLine($"Init: {sw.ElapsedMilliseconds}");
+        Trace.WriteLine($"Init: {sw.ElapsedMilliseconds}ms");
 
+        sw.Restart();
         GlobalMatrixBuild();
-        
+        Trace.WriteLine($"Build: {sw.ElapsedMilliseconds}ms");
+
         sw.Restart();
         BoundaryConditionsApply();
-        Console.WriteLine($"Conds: {sw.ElapsedMilliseconds}");
+        Trace.WriteLine($"Conds: {sw.ElapsedMilliseconds}");
+        Trace.Unindent();
 
         return (_matrix, _b);
     }
@@ -675,9 +681,6 @@ class MsrSlaeBuilder : ISlaeBuilder
                 }
             }
         }
-        
-        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
-
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
         for (int i = 0; i < _matrix.Di.Length; i++)
@@ -692,7 +695,6 @@ class MsrSlaeBuilder : ISlaeBuilder
     void GlobalMatrixBuildImplHostParallel()
     {
         // csharp не нравится stackalloc в циклах
-        var kernTime = Stopwatch.StartNew();
         var part_y = Partitioner.Create(0, _mesh.Y.Length - 1);
 
         Parallel.ForEach(part_y, (range, state) =>
@@ -808,7 +810,6 @@ class MsrSlaeBuilder : ISlaeBuilder
         }
         );
 
-        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
         for (int i = 0; i < _matrix.Di.Length; i++)
@@ -820,14 +821,25 @@ class MsrSlaeBuilder : ISlaeBuilder
         }
     }
 
+    static SparkCL.Kernel? kernCompose = null;
     void GlobalMatrixBuildImplOcl()
     {
-        var prog = new ComputeProgram("Kernels.cl");
-        var kernCompose = prog.GetKernel(
-            "global_matrix_compose",
-            globalWork: new NDRange((nuint)Mesh.X.Length, (nuint)Mesh.Y.Length).PadTo(4),
-            localWork: new NDRange(4, 4)
-        );
+        Trace.Indent();
+        var sw = Stopwatch.StartNew();
+        
+        if (kernCompose == null)
+        {
+            var prog = new ComputeProgram("SlaeBuilder/MsrCompose.cl");
+            kernCompose = prog.GetKernel(
+                "global_matrix_compose",
+                globalWork: new NDRange((nuint)Mesh.X.Length, (nuint)Mesh.Y.Length).PadTo(4),
+                localWork: new NDRange(4, 4)
+            );
+        }
+        
+        Trace.WriteLine($"Kernel prepare: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         var mat = new ComputeBuffer<Real>(_matrix.Elems, BufferFlags.OnDevice);
         var di = new ComputeBuffer<Real>(_matrix.Di, BufferFlags.OnDevice);
         var b = new ComputeBuffer<Real>(_b, BufferFlags.OnDevice);
@@ -835,7 +847,10 @@ class MsrSlaeBuilder : ISlaeBuilder
         var ja = new ComputeBuffer<int>(_matrix.Ja, BufferFlags.OnDevice);
         var x_axis = new ComputeBuffer<Real>(Mesh.X, BufferFlags.OnDevice);
         var y_axis = new ComputeBuffer<Real>(Mesh.Y, BufferFlags.OnDevice);
-
+        
+        Trace.WriteLine($"Transfer Host->Device: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         kernCompose.SetArg(0, mat);
         kernCompose.SetArg(1, di);
         kernCompose.SetArg(2, b);
@@ -846,15 +861,21 @@ class MsrSlaeBuilder : ISlaeBuilder
         kernCompose.SetArg(7, x_axis.Length);
         kernCompose.SetArg(8, y_axis);
         kernCompose.SetArg(9, y_axis.Length);
-
-        var kernTime = Stopwatch.StartNew();
+        
+        Trace.WriteLine($"Setargs: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         kernCompose.Execute();
-        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
+        
+        Trace.WriteLine($"Build time: {sw.ElapsedMilliseconds}ms");
+        sw.Restart();
 
         mat.DeviceReadTo(_matrix.Elems);
         di.DeviceReadTo(_matrix.Di);
         b.DeviceReadTo(_b);
-
+        Trace.WriteLine($"Transfer Device->Host: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
         for (int i = 0; i < _matrix.Di.Length; i++)
@@ -864,16 +885,26 @@ class MsrSlaeBuilder : ISlaeBuilder
                 _matrix.Di[i] = 1;
             }
         }
+        
+        Trace.WriteLine($"0->1 on diag: {sw.ElapsedMilliseconds}ms");
+        Trace.Unindent();
     }
 
     void GlobalMatrixBuildImplOclV2()
     {
-        var prog = new ComputeProgram("ComposeV2.cl");
+        Trace.Indent();
+        var sw = Stopwatch.StartNew();
+        
+        var prog = new ComputeProgram("SlaeBuilder/ComposeV2.cl");
         var kernCompose = prog.GetKernel(
             "global_matrix_compose_v2",
             globalWork: new NDRange((nuint)Mesh.X.Length, (nuint)Mesh.Y.Length).PadTo(4),
             localWork: new NDRange(4, 4)
         );
+        
+        Trace.WriteLine($"Kernel prepare: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         var mat = new ComputeBuffer<Real>(_matrix.Elems, BufferFlags.OnDevice);
         var di = new ComputeBuffer<Real>(_matrix.Di, BufferFlags.OnDevice);
         var b = new ComputeBuffer<Real>(_b, BufferFlags.OnDevice);
@@ -882,6 +913,9 @@ class MsrSlaeBuilder : ISlaeBuilder
         var x_axis = new ComputeBuffer<Real>(Mesh.X, BufferFlags.OnDevice);
         var y_axis = new ComputeBuffer<Real>(Mesh.Y, BufferFlags.OnDevice);
 
+        Trace.WriteLine($"Transfer Host->Device: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         kernCompose.SetArg(0, mat);
         kernCompose.SetArg(1, di);
         kernCompose.SetArg(2, b);
@@ -893,14 +927,21 @@ class MsrSlaeBuilder : ISlaeBuilder
         kernCompose.SetArg(8, y_axis);
         kernCompose.SetArg(9, y_axis.Length);
 
-        var kernTime = Stopwatch.StartNew();
+        Trace.WriteLine($"Setargs: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         kernCompose.Execute();
-        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
+        
+        Trace.WriteLine($"Build time: {sw.ElapsedMilliseconds}ms");
+        sw.Restart();
 
         mat.DeviceReadTo(_matrix.Elems);
         di.DeviceReadTo(_matrix.Di);
         b.DeviceReadTo(_b);
 
+        Trace.WriteLine($"Transfer Device->Host: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         // TODO: это легко сделать в OpenCL
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
@@ -911,5 +952,8 @@ class MsrSlaeBuilder : ISlaeBuilder
                 _matrix.Di[i] = 1;
             }
         }
+        
+        Trace.WriteLine($"0->1 on diag: {sw.ElapsedMilliseconds}ms");
+        Trace.Unindent();
     }
 }

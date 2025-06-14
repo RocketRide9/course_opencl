@@ -35,15 +35,21 @@ class DiagSlaeBuilder : ISlaeBuilder
 
     public (Matrix, Real[]) Build()
     {
+        Trace.WriteLine($"Diag Builder: {GlobalMatrixImpl}");
+
+        Trace.Indent();
         var sw = Stopwatch.StartNew();
         GlobalMatrixInit();
-        Console.WriteLine($"Init: {sw.ElapsedMilliseconds}");
-        
+        Trace.WriteLine($"Init: {sw.ElapsedMilliseconds}ms");
+
+        sw.Restart();
         GlobalMatrixBuild();
-        
+        Trace.WriteLine($"Build: {sw.ElapsedMilliseconds}ms");
+
         sw.Restart();
         BoundaryConditionsApply();
-        Console.WriteLine($"Conds: {sw.ElapsedMilliseconds}");
+        Trace.WriteLine($"Conds: {sw.ElapsedMilliseconds}");
+        Trace.Unindent();
 
         return (_matrix, _b);
     }
@@ -85,7 +91,6 @@ class DiagSlaeBuilder : ISlaeBuilder
 
             int t;
 
-#if true
             /* Гауссово исключение столбца */
             t = m-3-_matrix.Gap;
             if (t >= 0) _b[t] -= b * _matrix.Rd3[t];
@@ -104,8 +109,6 @@ class DiagSlaeBuilder : ISlaeBuilder
             if (t < _matrix.Size) _b[t] -= b * _matrix.Ld2[m];
             t = m+3+_matrix.Gap;
             if (t < _matrix.Size) _b[t] -= b * _matrix.Ld3[m];
-#endif
-
 
             /* Обнуление строки и столбца */
             _matrix.Rd3[m] = 0;
@@ -326,219 +329,12 @@ class DiagSlaeBuilder : ISlaeBuilder
         _matrix.Gap = _mesh.X.Length - 2;
     }
 
-#if false
-    void GlobalMatrixBuildImplHostV2()
-    {
-        Real GetGammaAverage(int dom, Real x0, Real y0, Real x1, Real y1)
-        {
-            Real res = _funcs.Gamma(dom, x0, y0)
-                       + _funcs.Gamma(dom, x1, y0)
-                       + _funcs.Gamma(dom, x0, y1)
-                       + _funcs.Gamma(dom, x1, y1);
-
-            return res / 4;
-        }
-
-        Real GetLamdaAverage(int dom, Real x0, Real y0, Real x1, Real y1)
-        {
-            Real res = _funcs.Lambda(dom, x0, y0)
-                       + _funcs.Lambda(dom, x1, y0)
-                       + _funcs.Lambda(dom, x0, y1)
-                       + _funcs.Lambda(dom, x1, y1);
-
-            return res / 4;
-        }
-
-        Span<Real> matc = stackalloc Real[8];
-        for (int yi = 0; yi < _mesh.Y.Length; yi++)
-        {
-            for (int xi = 0; xi < _mesh.X.Length; xi++)
-            {
-                int targetNode = yi * _mesh.X.Length + xi;
-                var dom1 = _mesh.GetSubdomNumAtElCoords(xi - 1, yi - 1);
-                var dom2 = _mesh.GetSubdomNumAtElCoords(xi, yi - 1);
-                var dom3 = _mesh.GetSubdomNumAtElCoords(xi - 1, yi);
-                var dom4 = _mesh.GetSubdomNumAtElCoords(xi, yi);
-
-                // номера текущего узла и соседних с ним сверху и снизу 
-                // в порядке снизу вверх
-                // могут выходить за пределы нумерации
-                int r1 = targetNode;
-                int r0 = r1 - _mesh.X.Length;
-                int r2 = r1 + _mesh.X.Length;
-
-                // номера этих узлов в строке матрицы, относящейся к текущему узлу
-                int mr0 = -1;
-                int mr1 = -1;
-                int mr2 = -1;
-                
-                int beg = _slae.Ia[targetNode];
-                int bound = _slae.Ia[targetNode + 1] - 1;
-
-                // TODO: можно немного ускорить поиск за счёт перемещения левой границы поиска
-                // но возможно быстрее будет сделать простой линейный поиск вместо "быстрого"
-                // int curr = beg;
-                if (r0 >= 0)
-                {
-                    mr0 = LFind(_slae.Ja, r0, beg) - beg;
-                }
-                // else оставить -1, так как узел вышел за пределы матрицы
-
-                if (r1 % _mesh.X.Length == 0)
-                {
-                    mr1 = LFind(_slae.Ja, r1+1, beg) - 1 - beg;
-                }
-                else
-                {
-                    mr1 = LFind(_slae.Ja, r1-1, beg) - beg;
-                }
-
-                if (r2 < _slae.Di.Length)
-                {
-                    mr2 = LFind(_slae.Ja, r2, beg) - beg;
-                }
-
-                // Console.WriteLine("mr = {0}, {1}, {2}", mr0, mr1, mr2);
-                // Console.WriteLine("xi, yi = {0}, {1}", xi, yi);
-                // Console.WriteLine("dom = {0}, {1}, {2}, {3}", dom1, dom2, dom3, dom4);
-
-                for (int i = 0; i < 8; i++)
-                {
-                    matc[i] = 0;
-                }
-                
-                Real dic = 0;
-                Real bc = 0;
-
-                Real x1 = _mesh.X[xi];
-                Real y1 = _mesh.Y[yi];
-
-                if (dom1.HasValue)
-                {
-                    var x0 = _mesh.X[xi-1];
-                    var y0 = _mesh.Y[yi-1];
-                    var l_avg = GetLamdaAverage(dom1.Value, x0, y0, x1, y1);
-                    var g_avg = GetGammaAverage(dom1.Value, x0, y0, x1, y1);
-                    var hx0 = x1 - x0;
-                    var hy0 = y1 - y0;
-
-                    matc[mr0 - 1] += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 0] + hx0 / hy0 * LocalG2[3, 0])
-                        + g_avg / 36 * hx0 * hy0 * LocalM[3, 0];
-                    matc[mr0]     += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 1] + hx0 / hy0 * LocalG2[3, 1])
-                        + g_avg / 36 * hx0 * hy0 * LocalM[3, 1];
-                    matc[mr1]     += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 2] + hx0 / hy0 * LocalG2[3, 2])
-                        + g_avg / 36 * hx0 * hy0 * LocalM[3, 2];
-                    dic           += l_avg / 6 * (hy0 / hx0 * LocalG1[3, 3] + hx0 / hy0 * LocalG2[3, 3])
-                        + g_avg / 36 * hx0 * hy0 * LocalM[3, 3];
-
-                    Real f1 = _funcs.F(dom1.Value, x0, y0);
-                    Real f2 = _funcs.F(dom1.Value, x1, y0);
-                    Real f3 = _funcs.F(dom1.Value, x0, y1);
-                    Real f4 = _funcs.F(dom1.Value, x1, y1);
-
-                    bc += hx0 * hy0 / 36 * (f1 + 2 * f2 + 2 * f3 + 4 * f4);
-                }
-
-                // continue;
-
-                if (dom2.HasValue)
-                {
-                    var x2 = _mesh.X[xi+1];
-                    var y0 = _mesh.Y[yi-1];
-                    var l_avg = GetLamdaAverage(dom2.Value, x1, y0, x2, y1);
-                    var g_avg = GetGammaAverage(dom2.Value, x1, y0, x2, y1);
-                    var hx1 = x2 - x1;
-                    var hy0 = y1 - y0;
-
-                    matc[mr0] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 0] + hx1 / hy0 * LocalG2[2, 0])
-                        + g_avg / 36 * hx1 * hy0 * LocalM[2, 0];
-                    matc[mr0 + 1] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 1] + hx1 / hy0 * LocalG2[2, 1])
-                        + g_avg / 36 * hx1 * hy0 * LocalM[2, 1];
-                    dic += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 2] + hx1 / hy0 * LocalG2[2, 2])
-                        + g_avg / 36 * hx1 * hy0 * LocalM[2, 2];
-                    matc[mr1 + 1] += l_avg / 6 * (hy0 / hx1 * LocalG1[2, 3] + hx1 / hy0 * LocalG2[2, 3])
-                        + g_avg / 36 * hx1 * hy0 * LocalM[2, 3];
-
-                    Real f1 = _funcs.F(dom2.Value, x1, y0);
-                    Real f2 = _funcs.F(dom2.Value, x2, y0);
-                    Real f3 = _funcs.F(dom2.Value, x1, y1);
-                    Real f4 = _funcs.F(dom2.Value, x2, y1);
-
-                    bc += hx1 * hy0 / 36 * (2 * f1 + f2 + 4 * f3 + 2 * f4);
-                }
-
-                if (dom3.HasValue)
-                {
-                    var x0 = _mesh.X[xi-1];
-                    var y2 = _mesh.Y[yi+1];
-                    var l_avg = GetLamdaAverage(dom3.Value, x0, y1, x1, y2);
-                    var g_avg = GetGammaAverage(dom3.Value, x0, y1, x1, y2);
-                    var hx0 = x1 - x0;
-                    var hy1 = y2 - y1;
-
-                    matc[mr1] += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 0] + hx0 / hy1 * LocalG2[1, 0])
-                        + g_avg / 36 * hx0 * hy1 * LocalM[1, 0];
-                    dic += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 1] + hx0 / hy1 * LocalG2[1, 1])
-                        + g_avg / 36 * hx0 * hy1 * LocalM[1, 1];
-                    matc[mr2 - 1] += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 2] + hx0 / hy1 * LocalG2[1, 2])
-                        + g_avg / 36 * hx0 * hy1 * LocalM[1, 2];
-                    matc[mr2] += l_avg / 6 * (hy1 / hx0 * LocalG1[1, 3] + hx0 / hy1 * LocalG2[1, 3])
-                        + g_avg / 36 * hx0 * hy1 * LocalM[1, 3];
-
-                    Real f1 = _funcs.F(dom3.Value, x0, y1);
-                    Real f2 = _funcs.F(dom3.Value, x1, y1);
-                    Real f3 = _funcs.F(dom3.Value, x0, y2);
-                    Real f4 = _funcs.F(dom3.Value, x1, y2);
-
-                    bc += hx0 * hy1 / 36 * (2 * f1 + 4 * f2 + f3 + 2 * f4);
-                }
-
-                if (dom4.HasValue)
-                {
-                    var x2 = _mesh.X[xi+1];
-                    var y2 = _mesh.Y[yi+1];
-                    var l_avg = GetLamdaAverage(dom4.Value, x1, y1, x2, y2);
-                    var g_avg = GetGammaAverage(dom4.Value, x1, y1, x2, y2);
-                    var hx1 = x2 - x1;
-                    var hy1 = y2 - y1;
-
-                    dic += l_avg / 6 * (hy1 / hx1 * LocalG1[0, 0] + hx1 / hy1 * LocalG2[0, 0])
-                        + g_avg / 36 * hx1 * hy1 * LocalM[0, 0];
-                    matc[mr1 + 1] += l_avg / 6 * (hy1 / hx1 * LocalG1[0, 1] + hx1 / hy1 * LocalG2[0, 1])
-                        + g_avg / 36 * hx1 * hy1 * LocalM[0, 1];
-                    matc[mr2] += l_avg / 6 * (hy1 / hx1 * LocalG1[0, 2] + hx1 / hy1 * LocalG2[0, 2])
-                        + g_avg / 36 * hx1 * hy1 * LocalM[0, 2];
-                    matc[mr2 + 1] += l_avg / 6 * (hy1 / hx1 * LocalG1[0, 3] + hx1 / hy1 * LocalG2[0, 3])
-                        + g_avg / 36 * hx1 * hy1 * LocalM[0, 3];
-
-                    Real f1 = _funcs.F(dom4.Value, x1, y1);
-                    Real f2 = _funcs.F(dom4.Value, x2, y1);
-                    Real f3 = _funcs.F(dom4.Value, x1, y2);
-                    Real f4 = _funcs.F(dom4.Value, x2, y2);
-
-                    bc += hx1 * hy1 / 36 * (4 * f1 + 2 * f2 + 2 * f3 + f4);
-                }
-
-                _slae.Di[targetNode] = dic;
-                _b[targetNode] = bc;
-
-                // перемещение строки в матрицу
-                for (int i = beg; i <= bound; i++)
-                {
-                    _slae.Mat[i] = matc[i-beg];
-                }
-            }
-        }
-    }
-#endif
-
     void GlobalMatrixBuild()
     {
         switch (GlobalMatrixImpl)
         {
             case GlobalMatrixImplType.OpenCL:
-                throw new NotImplementedException();
-                // GlobalMatrixBuildImplOcl();
+                GlobalMatrixBuildImplOcl();
                 break;
             case GlobalMatrixImplType.Host:
                 GlobalMatrixBuildImplHost();
@@ -548,12 +344,8 @@ class DiagSlaeBuilder : ISlaeBuilder
                 break;
             case GlobalMatrixImplType.HostV2:
                 throw new NotImplementedException();
-                // GlobalMatrixBuildImplHostV2();
-                break;
             case GlobalMatrixImplType.OpenCLV2:
                 throw new NotImplementedException();
-                // GlobalMatrixBuildImplOclV2();
-                break;
             default:
                 throw new InvalidOperationException();
         }
@@ -757,8 +549,6 @@ class DiagSlaeBuilder : ISlaeBuilder
             }
         }
         );
-
-        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
         /* После сборки матрицы надо нулевые диагональные элементы заменить
             на 1 */
         for (int i = 0; i < _matrix.Di.Length; i++)
@@ -770,100 +560,90 @@ class DiagSlaeBuilder : ISlaeBuilder
         }
     }
 
-#if false
+    static ComputeProgram? progCompose = null;
     void GlobalMatrixBuildImplOcl ()
     {
-        var prog = new Program("Kernels.cl");
-        var kernCompose = prog.GetKernel(
+        Trace.Indent();
+        var sw = Stopwatch.StartNew();
+        
+        if (progCompose == null)
+        {
+            progCompose = new ComputeProgram("SlaeBuilder/DiagCompose.cl");
+        }
+        var kernCompose = progCompose.GetKernel(
             "global_matrix_compose",
-            globalWork: new(PaddedTo(Mesh.X.Length, 4), PaddedTo(Mesh.Y.Length, 4)),
+            globalWork: new(NDRange.PaddedTo(_mesh.X.Length, 4), NDRange.PaddedTo(_mesh.Y.Length, 4)),
             localWork: new(4, 4)
         );
-        var mat    = new ComputeBuffer<Real>(_slae.Mat, BufferFlags.OnDevice);
-        var di     = new ComputeBuffer<Real>(_slae.Di , BufferFlags.OnDevice);
-        var b      = new ComputeBuffer<Real>(B  , BufferFlags.OnDevice);
-        var ia     = new ComputeBuffer<int> (_slae.Ia , BufferFlags.OnDevice);
-        var ja     = new ComputeBuffer<int> (_slae.Ja , BufferFlags.OnDevice);
-        var x_axis = new ComputeBuffer<Real>(Mesh.X   , BufferFlags.OnDevice);
-        var y_axis = new ComputeBuffer<Real>(Mesh.Y   , BufferFlags.OnDevice);
-
-        kernCompose.SetArg(0, mat);
-        kernCompose.SetArg(1, di);
-        kernCompose.SetArg(2, b);
-        kernCompose.SetArg(3, ia);
-        kernCompose.SetArg(4, ja);
-        kernCompose.SetArg(5, di.Length);
-        kernCompose.SetArg(6, x_axis);
-        kernCompose.SetArg(7, x_axis.Length);
-        kernCompose.SetArg(8, y_axis);
-        kernCompose.SetArg(9, y_axis.Length);
-
-        var kernTime = Stopwatch.StartNew();
+        
+        Trace.WriteLine($"Kernel prepare: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
+        var ld3    = new ComputeBuffer<Real>(_matrix.Ld3, BufferFlags.OnDevice);
+        var ld2    = new ComputeBuffer<Real>(_matrix.Ld2, BufferFlags.OnDevice);
+        var ld1    = new ComputeBuffer<Real>(_matrix.Ld1, BufferFlags.OnDevice);
+        var ld0    = new ComputeBuffer<Real>(_matrix.Ld0, BufferFlags.OnDevice);
+        var di     = new ComputeBuffer<Real>(_matrix.Di , BufferFlags.OnDevice);
+        var rd0    = new ComputeBuffer<Real>(_matrix.Rd0, BufferFlags.OnDevice);
+        var rd1    = new ComputeBuffer<Real>(_matrix.Rd1, BufferFlags.OnDevice);
+        var rd2    = new ComputeBuffer<Real>(_matrix.Rd2, BufferFlags.OnDevice);
+        var rd3    = new ComputeBuffer<Real>(_matrix.Rd3, BufferFlags.OnDevice);
+        var b      = new ComputeBuffer<Real>(_b         , BufferFlags.OnDevice);
+        var x_axis = new ComputeBuffer<Real>(_mesh.X     , BufferFlags.OnDevice);
+        var y_axis = new ComputeBuffer<Real>(_mesh.Y     , BufferFlags.OnDevice);
+        
+        Trace.WriteLine($"Transfer Host->Device: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
+        kernCompose.SetArg(0, ld3);
+        kernCompose.SetArg(1, ld2);
+        kernCompose.SetArg(2, ld1);
+        kernCompose.SetArg(3, ld0);
+        kernCompose.SetArg(4, di);
+        kernCompose.SetArg(5, rd0);
+        kernCompose.SetArg(6, rd1);
+        kernCompose.SetArg(7, rd2);
+        kernCompose.SetArg(8, rd3);
+        kernCompose.SetArg(9, b);
+        kernCompose.SetArg(10, _matrix.Size);
+        kernCompose.SetArg(11, _matrix.Gap);
+        kernCompose.SetArg(12, x_axis);
+        kernCompose.SetArg(13, x_axis.Length);
+        kernCompose.SetArg(14, y_axis);
+        kernCompose.SetArg(15, y_axis.Length);
+        
+        Trace.WriteLine($"Setargs: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
         kernCompose.Execute();
-        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
-
-        mat.DeviceReadTo(_slae.Mat);
-        di.DeviceReadTo(_slae.Di);
-        b.DeviceReadTo(B);
-
-        /* После сборки матрицы надо нулевые диагональные элементы заменить
-            на 1 */
-        for (int i = 0; i < _slae.Di.Length; i++)
+        
+        Trace.WriteLine($"Build time: {sw.ElapsedMilliseconds}ms");
+        sw.Restart();
+        
+        ld3.DeviceReadTo(_matrix.Ld3);
+        ld2.DeviceReadTo(_matrix.Ld2);
+        ld1.DeviceReadTo(_matrix.Ld1);
+        ld0.DeviceReadTo(_matrix.Ld0);
+        di.DeviceReadTo(_matrix.Di);
+        rd0.DeviceReadTo(_matrix.Rd0);
+        rd1.DeviceReadTo(_matrix.Rd1);
+        rd2.DeviceReadTo(_matrix.Rd2);
+        rd3.DeviceReadTo(_matrix.Rd3);
+        b.DeviceReadTo(_b);
+        
+        Trace.WriteLine($"Transfer Device->Host: {sw.ElapsedMilliseconds}");
+        sw.Restart();
+        
+        // После сборки матрицы надо нулевые диагональные элементы заменить на 1
+        for (int i = 0; i < _matrix.Size; i++)
         {
-            if (_slae.Di[i] == 0)
+            if (_matrix.Di[i] == 0)
             {
-                _slae.Di[i] = 1;
+                _matrix.Di[i] = 1;
             }
         }
-    }
-#endif
-
-#if false
-    void GlobalMatrixBuildImplOclV2 ()
-    {
-        var prog = new Program("ComposeV2.cl");
-        var kernCompose = prog.GetKernel(
-            "global_matrix_compose_v2",
-            globalWork: new(PaddedTo(Mesh.X.Length, 4), PaddedTo(Mesh.Y.Length, 4)),
-            localWork: new(4, 4)
-        );
-        var mat    = new ComputeBuffer<Real>(_slae.Mat, BufferFlags.OnDevice);
-        var di     = new ComputeBuffer<Real>(_slae.Di , BufferFlags.OnDevice);
-        var b      = new ComputeBuffer<Real>(B  , BufferFlags.OnDevice);
-        var ia     = new ComputeBuffer<int> (_slae.Ia , BufferFlags.OnDevice);
-        var ja     = new ComputeBuffer<int> (_slae.Ja , BufferFlags.OnDevice);
-        var x_axis = new ComputeBuffer<Real>(Mesh.X   , BufferFlags.OnDevice);
-        var y_axis = new ComputeBuffer<Real>(Mesh.Y   , BufferFlags.OnDevice);
-
-        kernCompose.SetArg(0, mat);
-        kernCompose.SetArg(1, di);
-        kernCompose.SetArg(2, b);
-        kernCompose.SetArg(3, ia);
-        kernCompose.SetArg(4, ja);
-        kernCompose.SetArg(5, di.Length);
-        kernCompose.SetArg(6, x_axis);
-        kernCompose.SetArg(7, x_axis.Length);
-        kernCompose.SetArg(8, y_axis);
-        kernCompose.SetArg(9, y_axis.Length);
-
-        var kernTime = Stopwatch.StartNew();
-        kernCompose.Execute();
-        Console.WriteLine($"Build time: {kernTime.ElapsedMilliseconds}ms");
-
-        mat.DeviceReadTo(_slae.Mat);
-        di.DeviceReadTo(_slae.Di);
-        b.DeviceReadTo(B);
-
-        // TODO: это легко сделать в OpenCL
-        /* После сборки матрицы надо нулевые диагональные элементы заменить
-            на 1 */
-        for (int i = 0; i < _slae.Di.Length; i++)
-        {
-            if (_slae.Di[i] == 0)
-            {
-                _slae.Di[i] = 1;
-            }
-        }
-    }
-#endif
+        
+        Trace.WriteLine($"0->1 on diag: {sw.ElapsedMilliseconds}ms");
+        Trace.Unindent();
+    }   
 }

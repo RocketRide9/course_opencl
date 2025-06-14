@@ -15,18 +15,15 @@ function run_debug () {
 
 # Ручная сборка и запуск программы из директории с исполняемым файлом
 # если аргумент не указан - собрать и запустить в конфигурации для отладки
-if [ $# -eq 0 ]; then
-    run_debug
-    exit 0
-elif [ $# -gt 1 ]; then
-    echo "Ожидается один аргумент, либо нисколько. Получено: $#"
+if [ $# -ne 1 ]; then
+    echo "Ожидается один аргумент. Получено: $#"
     exit 1
 fi
 
 if [[ "$1" == "--debug" ]]; then
-    run_debug
+    time run_debug
 elif [[ "$1" == "--release" ]]; then
-    run_release
+    time run_release
 fi
 
 exit 0

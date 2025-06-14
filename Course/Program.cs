@@ -1,17 +1,21 @@
+#define SPARKCL_COLLECT_TIME
+
 #if USE_DOUBLE
 using Real = double;
 #else
 using Real = float;
 #endif
 
+
 using System.Globalization;
 using System.Diagnostics;
 
 using SparkCL;
+using SparkAlgos.SlaeSolver;
+using SlaeSolver;
 
 using SlaeBuilder;
 using Matrices;
-using System.Drawing;
 
 class Course
 {
@@ -19,23 +23,16 @@ class Course
     {
         Core.Init();
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var unixMs = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
+        Trace.Listeners.Add(new TextWriterTraceListener(new StreamWriter("timings_" + unixMs + "_.txt")));
+        Trace.AutoFlush = true;
 
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchMsrMul).Assembly).RunAll();
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchBicgStabPure).Assembly).RunAll();
-        // SolveAndExportSomeSlae();
-        // VerifyBuilds<SymDiagSlaeBuilder, DiagSlaeBuilder>();
-        // return;
-        for (int i = 0; i < 5; i++)
-        {
-            TestHostVSOpenCLOnce<SymDiagSlaeBuilder>();
-        }
-        // TestConvergence<DiagSlaeBuilder>();
-        // TestConvergence<SymDiagSlaeBuilder>();
-        // TestParallelBuildV2();
-        // TestHostVSOpenCLOnce();
-        // TestAtomicAdd();
-        // TestBuildImpls();
-        
+
+        // BuildImplsXMatrices();
+        MatricesXSolvers();
+
         /*
         Console.WriteLine("Waiting for debugger to attach");
         while (!Debugger.IsAttached)
@@ -45,8 +42,40 @@ class Course
         Console.WriteLine("Debugger attached");
         Debugger.Break();
         */
-        
-        // TestBuildImplsIncreasing();
+    }
+    
+    static void MatricesXSolvers()
+    {
+        var task = new TaskRect4x5();
+        var prob = new ProblemLine(task, "../../../InputRect4x5");
+        prob.buildType = GlobalMatrixImplType.HostParallel;
+
+        Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
+
+        for (int i = 0; i < 5; i++)
+        {
+            prob.Build<DiagSlaeBuilder>();
+            // SolveHost<BicgStabHost>(prob);
+            SolveOCL<BicgStabOCL>(prob);
+            // SolveHost<CgmHost>(prob);
+            SolveOCL<CgmOCL>(prob);
+            
+            Trace.WriteLine("");
+            
+            prob.Build<SymDiagSlaeBuilder>();
+            // SolveHost<BicgStabHost>(prob);
+            SolveOCL<BicgStabOCL>(prob);
+            // SolveHost<CgmHost>(prob);
+            SolveOCL<CgmOCL>(prob);
+            
+            Trace.WriteLine("");
+            
+            prob.Build<MsrSlaeBuilder>();
+            // SolveHost<BicgStabHost>(prob);
+            SolveOCL<BicgStabOCL>(prob);
+            
+            Trace.WriteLine("");
+        }
     }
     
     static void VerifyBuilds<T1, T2>()
@@ -81,124 +110,46 @@ class Course
             Console.WriteLine(string.Join(',', matrix2.FlatNonZero()));
         }
     }
-
-    static void TestParallelBuildV2()
+    
+    static void SolveOCL<T>(ProblemLine prob)
+    where T: SparkAlgos.SlaeSolver.ISlaeSolver
     {
-        var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
-
-        var sw = new Stopwatch();
-        { // Classic build
-            sw.Start();
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            sw.Stop();
-            var err = prob.Lebeg2Err(ans);
-            var (ioTime, kernTime) = Core.MeasureTime();
-            ioTime /= (ulong)1e+6;
-            kernTime /= (ulong)1e+6;
-            Console.WriteLine($"(err {err}) {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
-            sw.Reset();
-        }
-        
-        { // ParallelV2 build
-            prob.buildType = GlobalMatrixImplType.HostV2;
-            prob.Build<MsrSlaeBuilder>();
-            
-            sw.Start();
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            sw.Stop();
-            var err = prob.Lebeg2Err(ans);
-            var (ioTime, kernTime) = Core.MeasureTime();
-            ioTime /= (ulong)1e+6;
-            kernTime /= (ulong)1e+6;
-            Console.WriteLine($"(err {err}) {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
-            sw.Reset();
-        }
-
-        // return;
-        { // ParallelOclV2 build
-            prob.buildType = GlobalMatrixImplType.OpenCLV2;
-            prob.Build<MsrSlaeBuilder>();
-            
-            sw.Start();
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            sw.Stop();
-            var err = prob.Lebeg2Err(ans);
-            var (ioTime, kernTime) = Core.MeasureTime();
-            ioTime /= (ulong)1e+6;
-            kernTime /= (ulong)1e+6;
-            Console.WriteLine($"(err {err}) {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
-            sw.Reset();
-        }
+        Trace.WriteLine("Setting up solver");
+        Trace.Indent();
+        var sw = Stopwatch.StartNew();
+#if SPARKCL_COLLECT_TIME
+        Core.ResetTime();
+#endif
+        var (ans, iters, rr) = prob.SolveOCL<T>();
+        sw.Stop();
+        var err = prob.Lebeg2Err(ans);
+#if SPARKCL_COLLECT_TIME
+        var (ioTime, kernTime) = Core.MeasureTime();
+        ioTime /= (ulong)1e+6;
+        kernTime /= (ulong)1e+6;
+#endif
+        Console.WriteLine($"(err {err}) (iters {iters}) (discrep: {rr})");
+        Trace.Write($"Solver total: {sw.ElapsedMilliseconds}мс");
+#if SPARKCL_COLLECT_TIME
+        Trace.Write($": {kernTime}мс + {ioTime}мс");
+#endif
+        Trace.WriteLine("");
+        Trace.Unindent();
     }
     
-    static void TestAtomicAdd()
+    static void SolveHost<T>(ProblemLine prob)
+    where T: SlaeSolver.ISlaeSolver
     {
-        var zero = new ComputeBuffer<Real>([0], BufferFlags.OnDevice);
-        var prog = new ComputeProgram("Kernels.clcpp");
-        var kernAddZeros = prog.GetKernel(
-            "add_to_zero",
-            new(1024, 1024),
-            new(2, 2)
-        );
-        kernAddZeros.SetArg(0, zero);
-        kernAddZeros.Execute();
-        Span<Real> zeroHost = stackalloc Real[1];
-        zero.DeviceReadTo(zeroHost);
-
-        Console.WriteLine("This is zero: {0}!", zeroHost[0]);
+        Trace.WriteLine("Setting up solver");
+        Trace.Indent();
+        var sw = Stopwatch.StartNew();
+        var (ans, iters, rr) = prob.SolveHost<T>();
+        sw.Stop();
+        var err = prob.Lebeg2Err(ans);
+        Console.WriteLine($"(err {err}) (iters {iters}) (discrep: {rr})");
+        Trace.WriteLine($"Solver total: {sw.ElapsedMilliseconds}мс");
+        Trace.Unindent();
     }
-
-    static void TestHostVSOpenCLOnce<T>()
-    where T: ISlaeBuilder
-    {
-        var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
-
-        prob.Build<T>();
-
-        var sw = new Stopwatch();
-        { // CSharp pure
-            sw.Start();
-            var (ans, iters, rr) = prob.SolveBiCGStabPure();
-            sw.Stop();
-            var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"(err {err}) {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс");
-            sw.Reset();
-        }
-
-        { // OpenCL
-            sw.Start();
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            sw.Stop();
-            var err = prob.Lebeg2Err(ans);
-            var (ioTime, kernTime) = Core.MeasureTime();
-            ioTime /= (ulong)1e+6;
-            kernTime /= (ulong)1e+6;
-            Console.WriteLine($"(err {err}) {iters} (discrep: {rr}) {sw.ElapsedMilliseconds}мс: {kernTime}мс + {ioTime}мс");
-            sw.Reset();
-        }
-    }
-
-    /*
-    static void SolveAndExportSomeSlae()
-    {
-        var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
-
-        for (int i = 0; i < 4; i++)
-        {
-            var sw = new Stopwatch();
-            sw.Start();
-            var (ans, iters, rr) = prob.SolveBiCGStabPure();
-            sw.Stop();
-            var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"(err {err}) (iters {iters}) (discrep {rr}) (time {sw.ElapsedMilliseconds}ms)");
-            sw.Reset();
-        }
-        prob.Serialize();
-    }
-    */
 
     static void TestBuildImplsIncreasing()
     {
@@ -269,99 +220,52 @@ class Course
         }
     }
     
-    static void TestBuildImpls()
+    static void BuildImplsXMatrices()
     {
         const int REPEAT_COUNT = 5;
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../InputRect4x5");
 
-        // норма 1706 итераций на решение слау n=?
-        // 385 итерация на решение слау n = 2^16
+        Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
         
-        Console.WriteLine("Classic Parallel:");
+        prob.buildType = GlobalMatrixImplType.HostParallel;
         for (int i = 0; i < REPEAT_COUNT; i++)
         { // Classic Parallel build
-            var sw = Stopwatch.StartNew();
-            prob.buildType = GlobalMatrixImplType.HostParallel;
-            prob.Build<MsrSlaeBuilder>();
-            sw.Stop();
-            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
-
-            /*
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"(err {err}) {iters} (discrep: {rr})");
-            */
-        }
-        
-        Console.WriteLine("Classic:");
-        for (int i = 0; i < REPEAT_COUNT; i++)
-        { // Classic Parallel build
-            var sw = Stopwatch.StartNew();
-            prob.buildType = GlobalMatrixImplType.Host;
-            prob.Build<MsrSlaeBuilder>();
-            sw.Stop();
-            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
-            /* 
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"(err {err}) (iters {iters}) (discrep {rr})");
-            */
-        }
-        /*
-        Console.WriteLine("Host V2:");
-        for (int i = 0; i < REPEAT_COUNT; i++)
-        { // ParallelV2 build
-            var sw = Stopwatch.StartNew();
-            prob.buildType = GlobalMatrixImplType.HostV2;
-            prob.Build<MsrSlaeBuilder>();
-            sw.Stop();
-            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
-            
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"(err {err}) (iters {iters}) (discrep {rr})");
-        }
-        */
-        /*
-        Console.WriteLine("OpenCL V2:");
-        for (int i = 0; i < REPEAT_COUNT; i++)
-        { // ParallelOclV2 build
-            var sw = Stopwatch.StartNew();
-            prob.buildType = GlobalMatrixImplType.OpenCLV2;
-            prob.Build<MsrSlaeBuilder>();
-            sw.Stop();
-            Console.WriteLine($"(combined build time {sw.ElapsedMilliseconds}ms)");
-            
-            
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"(err {err}) (iters {iters}) (discrep: {rr})");
-            
+            // prob.Build<MsrSlaeBuilder>();
+            prob.Build<SymDiagSlaeBuilder>();
+            prob.Build<DiagSlaeBuilder>();
+            // SolveOCL<BicgStabOCL>(prob);
         }
 
-        
-        Console.WriteLine("OpenCL:");
+        Trace.WriteLine("");
+
+// эта реализация сборки нужна только для проверки правильности
+#if false 
+        prob.buildType = GlobalMatrixImplType.Host;
         for (int i = 0; i < REPEAT_COUNT; i++)
-        { // ParallelOclV2 build
-            var sw = Stopwatch.StartNew();
-            prob.buildType = GlobalMatrixImplType.OpenCL;
+        { // Classic build
             prob.Build<MsrSlaeBuilder>();
-            sw.Stop();
-            Console.WriteLine($"(build time: {sw.ElapsedMilliseconds}ms)");
-            
-            var (ans, iters, rr) = prob.SolveBiCGStab();
-            var err = prob.Lebeg2Err(ans);
-            Console.WriteLine($"(err {err}) {iters} (discrep: {rr})");
+            prob.Build<SymDiagSlaeBuilder>();
+            prob.Build<DiagSlaeBuilder>();
+            // SolveOCL<BicgStabOCL>(prob);
         }
-        */
+        
+        Trace.WriteLine("");
+#endif
+        
+        prob.buildType = GlobalMatrixImplType.OpenCL;
+        for (int i = 0; i < REPEAT_COUNT; i++)
+        { // Classic OpenCL build
+            // prob.Build<MsrSlaeBuilder>();
+            prob.Build<DiagSlaeBuilder>();
+            prob.Build<SymDiagSlaeBuilder>();
+            // SolveOCL<CgmOCL>(prob);
+        }
     }
 
     static void TestConvergence<T>()
     where T: ISlaeBuilder
     {
-        var sw_bicg = new Stopwatch();
-        var sw_glob = new Stopwatch();
         var task = new TaskRect4x5();
 
         int REFINE_COUNT = 4;
@@ -369,29 +273,27 @@ class Course
 
         void _TestBicgOclBatch(ProblemLine prob)
         {
-            Console.WriteLine("n sw_glob err iters discrep total_time(ms) kerns(ms) pci_io(ms)");
+            Console.WriteLine("n err iters discrep kerns(ms) pci_io(ms)");
             int i = 0;
             while (true)
             {
-                sw_glob.Start();
                 prob.Build<T>();
-                sw_glob.Stop();
 
-                sw_bicg.Start();
+#if SPARKCL_COLLECT_TIME
                 Core.ResetTime();
-                var (ans, iters, rr) = prob.SolveBiCGStab();
-                sw_bicg.Stop();
+#endif
+                var (ans, iters, rr) = prob.SolveOCL<BicgStabOCL>();
                 var err = prob.Lebeg2Err(ans);
 
+#if SPARKCL_COLLECT_TIME
                 var (ioTime, kernTime) = Core.MeasureTime();
                 ioTime /= (ulong)1e+6;
                 kernTime /= (ulong)1e+6;
-                Console.Write($"{prob.matrix.Size} {sw_glob.ElapsedMilliseconds} ");
-                Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds} {kernTime} {ioTime}");
-
-                sw_bicg.Reset();
-                sw_glob.Reset();
-
+#endif
+                Console.Write($"{prob.matrix.Size} {err} {iters} {rr}");
+#if SPARKCL_COLLECT_TIME
+                Console.WriteLine($" {kernTime} {ioTime}");
+#endif
                 if (i >= REFINE_COUNT) break;
 
                 prob.MeshDouble();
@@ -401,24 +303,16 @@ class Course
         }
         void _TestBicgHostBatch(ProblemLine prob)
         {
-            Console.WriteLine("n sw_glob err iters discrep total_time(ms)");
+            Console.WriteLine("n err iters discrep");
             int i = 0;
             while (true)
             {
-                sw_glob.Start();
                 prob.Build<T>();
-                sw_glob.Stop();
 
-                sw_bicg.Start();
-                var (ans, iters, rr) = prob.SolveBiCGStabPure();
-                sw_bicg.Stop();
+                var (ans, iters, rr) = prob.SolveHost<BicgStabHost>();
                 var err = prob.Lebeg2Err(ans);
 
-                Console.Write($"{prob.matrix.Size} {sw_glob.ElapsedMilliseconds} ");
-                Console.WriteLine($"{err} {iters} {rr} {sw_bicg.ElapsedMilliseconds}");
-
-                sw_bicg.Reset();
-                sw_glob.Reset();
+                Console.WriteLine($"{prob.matrix.Size} {err} {iters} {rr}");
 
                 if (i >= REFINE_COUNT) break;
 
@@ -456,14 +350,13 @@ class Course
             ProblemLine prob;
 
             prob = new ProblemLine(task, "../../../InputRect4x5");
-            // TODO: 
-            // prob.slaeBuilder.GlobalMatrixImpl = GlobalMatrixImplType.OpenCL;
+            prob.buildType = GlobalMatrixImplType.OpenCL;
             _TestBicgOclBatch(prob);
             Console.WriteLine();
 
 #if false
             prob = new ProblemLine(task, "../../../InputRect4x5");
-            prob.slaeBuilder.GlobalMatrixImpl = GlobalMatrixImplType.OpenCL;
+            prob.buildType = GlobalMatrixImplType.OpenCL;
             _TestBicgHostBatch(prob);
             Console.WriteLine();
 #endif

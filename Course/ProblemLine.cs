@@ -6,11 +6,9 @@ using Real = float;
 
 using System.Text.Json;
 using System.Text.Unicode;
-
-using SparkAlgos.Solver;
+using System.Diagnostics;
 
 using SlaeBuilder;
-using Matrices;
 using Types;
 
 class ProblemLine {
@@ -18,6 +16,7 @@ class ProblemLine {
     ProblemParams _problemParams;
     public ProblemParams ProblemParams { get => _problemParams; }
     RefineParams _refineParams;
+    public RectMesh Mesh { get => _mesh; }
     RectMesh _mesh;
     ComputationalDomain _computationalDomain;
     BoundaryCondition[] _boundaryConditions;
@@ -25,21 +24,6 @@ class ProblemLine {
     public Matrix matrix;
     public Real[] b;
     public GlobalMatrixImplType buildType = GlobalMatrixImplType.Host;
-    
-    // void Repurpose (TaskFuncs taskFunctions, string taskFolder)
-    // {
-    //     computationalDomain = ReadDomains(taskFolder);
-    //     boundaryConditions = ReadConditions(taskFolder);
-
-    //     var mesh = new RectMesh(
-    //         computationalDomain.xAxis,
-    //         computationalDomain.yAxis,
-    //         computationalDomain.subDomains,
-    //         boundaryConditions
-    //     );
-
-    //     femSlae = new FEMSlae(mesh, taskFunctions, refineParams);
-    // }
 
     // folder - директория с условиями задачи
     public ProblemLine(TaskFuncs taskFunctions, string taskFolder, GlobalMatrixImplType buildType = GlobalMatrixImplType.Host)
@@ -85,9 +69,11 @@ class ProblemLine {
     public void Build<T>()
     where T: ISlaeBuilder
     {
+        var sw = Stopwatch.StartNew();
         var slaeBuilder = T.Construct(_mesh, _funcs);
         slaeBuilder.GlobalMatrixImpl = buildType;
         (matrix, b) = slaeBuilder.Build();
+        Trace.WriteLine($"ProblemLine.Build total: {sw.ElapsedMilliseconds}");
     }
     
     void MeshRefine(RefineParams refineParams)
@@ -181,28 +167,50 @@ class ProblemLine {
 
     // public void Serialize() => matrix.Serialize();
 
-    public (Real[] ans, int iters, Real rr) SolveBiCGStab ()
+    public (Real[] ans, int iters, Real rr) SolveOCL<T> ()
+    where T: SparkAlgos.SlaeSolver.ISlaeSolver
     {
+        var sw = Stopwatch.StartNew();
         var x0 = Enumerable.Repeat((Real)0, b.Length).ToArray();
-        var solver = new BicgStab(
+        var solver = T.Construct(
             _problemParams.maxIter,
             _problemParams.eps
         );
         solver.AllocateTemps(x0.Length);
-        var (rr, _, iter) = solver.Solve(matrix.GetComputeMatrix(), b, x0);
+        Trace.WriteLine($"Solver prepare: {sw.ElapsedMilliseconds}ms");
+        
+        sw.Restart();
+        
+        var cm = matrix.GetComputeMatrix();
+        Trace.WriteLine($"Matrix Host->Device: {sw.ElapsedMilliseconds}ms");
+        
+        sw.Restart();
+        
+        Trace.Indent();
+        var (rr, iter) = solver.Solve(cm, b, x0);
+        Trace.Unindent();
+        Trace.WriteLine($"Solver {typeof(T).FullName}: {sw.ElapsedMilliseconds}ms");
 
         return (x0, iter, rr);
     }
     
-    public (Real[] ans, int iters, Real rr) SolveBiCGStabPure ()
+    public (Real[] ans, int iters, Real rr) SolveHost<T> ()
+    where T: SlaeSolver.ISlaeSolver
     {
-        Real[] x0 = [.. Enumerable.Repeat((Real)0, b.Length)];
-        var solver = new BicgStabHost(
+        
+        var sw = Stopwatch.StartNew();
+        var x0 = Enumerable.Repeat((Real)0, b.Length).ToArray();
+        var solver = T.Construct(
             _problemParams.maxIter,
             _problemParams.eps
         );
         solver.AllocateTemps(x0.Length);
-        var (rr, _, iter) = solver.Solve(matrix, b, x0);
+        Trace.WriteLine($"Solver prepare: {sw.ElapsedMilliseconds}ms");
+        
+        sw.Restart();
+        
+        var (rr, iter) = solver.Solve(matrix, b, x0);
+        Trace.WriteLine($"Solver {typeof(T).FullName}: {sw.ElapsedMilliseconds}ms");
 
         return (x0, iter, rr);
     }

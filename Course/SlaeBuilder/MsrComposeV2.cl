@@ -1,7 +1,6 @@
 #define real double
-#define real4 float4
 
-#ifdef __MESA__
+#ifdef false
 #include "FEMShared.cl"
 #else
 real gamma(int subdom, real x, real y)
