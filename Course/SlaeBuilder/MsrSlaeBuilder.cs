@@ -889,18 +889,22 @@ class MsrSlaeBuilder : ISlaeBuilder
         Trace.WriteLine($"0->1 on diag: {sw.ElapsedMilliseconds}ms");
         Trace.Unindent();
     }
-
+    
+    static SparkCL.Kernel? kernComposeV2 = null;
     void GlobalMatrixBuildImplOclV2()
     {
         Trace.Indent();
         var sw = Stopwatch.StartNew();
         
-        var prog = new ComputeProgram("SlaeBuilder/ComposeV2.cl");
-        var kernCompose = prog.GetKernel(
-            "global_matrix_compose_v2",
-            globalWork: new NDRange((nuint)Mesh.X.Length, (nuint)Mesh.Y.Length).PadTo(4),
-            localWork: new NDRange(4, 4)
-        );
+        if (kernComposeV2 == null)
+        {
+            var prog = new ComputeProgram("SlaeBuilder/MsrComposeV2.cl");
+            kernComposeV2 = prog.GetKernel(
+                "global_matrix_compose_v2",
+                globalWork: new NDRange((nuint)Mesh.X.Length, (nuint)Mesh.Y.Length).PadTo(4),
+                localWork: new NDRange(4, 4)
+            );
+        }
         
         Trace.WriteLine($"Kernel prepare: {sw.ElapsedMilliseconds}");
         sw.Restart();
@@ -916,21 +920,21 @@ class MsrSlaeBuilder : ISlaeBuilder
         Trace.WriteLine($"Transfer Host->Device: {sw.ElapsedMilliseconds}");
         sw.Restart();
         
-        kernCompose.SetArg(0, mat);
-        kernCompose.SetArg(1, di);
-        kernCompose.SetArg(2, b);
-        kernCompose.SetArg(3, ia);
-        kernCompose.SetArg(4, ja);
-        kernCompose.SetArg(5, di.Length);
-        kernCompose.SetArg(6, x_axis);
-        kernCompose.SetArg(7, x_axis.Length);
-        kernCompose.SetArg(8, y_axis);
-        kernCompose.SetArg(9, y_axis.Length);
+        kernComposeV2.SetArg(0, mat);
+        kernComposeV2.SetArg(1, di);
+        kernComposeV2.SetArg(2, b);
+        kernComposeV2.SetArg(3, ia);
+        kernComposeV2.SetArg(4, ja);
+        kernComposeV2.SetArg(5, di.Length);
+        kernComposeV2.SetArg(6, x_axis);
+        kernComposeV2.SetArg(7, x_axis.Length);
+        kernComposeV2.SetArg(8, y_axis);
+        kernComposeV2.SetArg(9, y_axis.Length);
 
         Trace.WriteLine($"Setargs: {sw.ElapsedMilliseconds}");
         sw.Restart();
         
-        kernCompose.Execute();
+        kernComposeV2.Execute();
         
         Trace.WriteLine($"Build time: {sw.ElapsedMilliseconds}ms");
         sw.Restart();

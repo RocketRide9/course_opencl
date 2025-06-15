@@ -31,7 +31,9 @@ class Course
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchBicgStabPure).Assembly).RunAll();
 
         // BuildImplsXMatrices();
-        MatricesXSolvers();
+        // MatricesXSolvers();
+        // Table1();
+        Table2();
 
         /*
         Console.WriteLine("Waiting for debugger to attach");
@@ -44,31 +46,112 @@ class Course
         */
     }
     
+    static void Table2()
+    {
+        const int REPEAT_COUNT = 3;
+        const int REFINE_COUNT = 2;
+        
+        var task = new TaskRect4x5();
+        var prob = new ProblemLine(task, "../../../InputRect4x5");
+        prob.buildType = GlobalMatrixImplType.HostParallel;
+
+        for (int r = 0; r < REFINE_COUNT; r++)
+        {
+            Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
+            Console.WriteLine($"n = {prob.Mesh.nodesCount}");
+            
+            for (int i = 0; i < REPEAT_COUNT; i++)
+            {
+                prob.Build<SymDiagSlaeBuilder>();
+                SolveHost<BicgStabHost>(prob);
+                SolveOCL<BicgStabOCL>(prob);
+                SolveHost<CgmHost>(prob);
+                SolveOCL<CgmOCL>(prob);
+
+                Trace.WriteLine("");
+
+                prob.Build<MsrSlaeBuilder>();
+                SolveHost<BicgStabHost>(prob);
+                SolveOCL<BicgStabOCL>(prob);
+
+                Trace.WriteLine("");
+            }
+            
+            prob.MeshDouble();
+        }
+    }
+    
+    static void Table1()
+    {
+        const int REPEAT_COUNT = 3;
+        const int REFINE_COUNT = 7;
+        var task = new TaskRect4x5();
+        var prob = new ProblemLine(task, "../../../InputRect4x5");
+
+        for (int r = 0; r < REFINE_COUNT; r++)
+        {
+            Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
+    
+            prob.buildType = GlobalMatrixImplType.HostParallel;
+            for (int i = 0; i < REPEAT_COUNT; i++)
+            { // Element Parallel build
+                prob.Build<MsrSlaeBuilder>();
+                prob.Build<SymDiagSlaeBuilder>();
+                prob.Build<DiagSlaeBuilder>();
+                // SolveOCL<BicgStabOCL>(prob);
+            }
+    
+            Trace.WriteLine("");
+            
+            prob.buildType = GlobalMatrixImplType.OpenCL;
+            for (int i = 0; i < REPEAT_COUNT; i++)
+            { // Element OpenCL build
+                prob.Build<MsrSlaeBuilder>();
+                prob.Build<DiagSlaeBuilder>();
+                prob.Build<SymDiagSlaeBuilder>();
+                // SolveOCL<CgmOCL>(prob);
+            }
+            
+            Trace.WriteLine("");
+            
+            prob.buildType = GlobalMatrixImplType.OpenCLV2;
+            for (int i = 0; i < REPEAT_COUNT; i++)
+            { // Node OpenCL build
+                prob.Build<MsrSlaeBuilder>();
+                // SolveOCL<CgmOCL>(prob);
+            }
+            
+            Trace.WriteLine("");
+
+            prob.MeshDouble();
+        }
+    }
+    
     static void MatricesXSolvers()
     {
         var task = new TaskRect4x5();
         var prob = new ProblemLine(task, "../../../InputRect4x5");
-        prob.buildType = GlobalMatrixImplType.HostParallel;
+        prob.buildType = GlobalMatrixImplType.OpenCLV2;
 
         Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
 
         for (int i = 0; i < 5; i++)
         {
-            prob.Build<DiagSlaeBuilder>();
-            // SolveHost<BicgStabHost>(prob);
-            SolveOCL<BicgStabOCL>(prob);
-            // SolveHost<CgmHost>(prob);
-            SolveOCL<CgmOCL>(prob);
+            // prob.Build<DiagSlaeBuilder>();
+            // // SolveHost<BicgStabHost>(prob);
+            // SolveOCL<BicgStabOCL>(prob);
+            // // SolveHost<CgmHost>(prob);
+            // SolveOCL<CgmOCL>(prob);
             
-            Trace.WriteLine("");
+            // Trace.WriteLine("");
             
-            prob.Build<SymDiagSlaeBuilder>();
-            // SolveHost<BicgStabHost>(prob);
-            SolveOCL<BicgStabOCL>(prob);
-            // SolveHost<CgmHost>(prob);
-            SolveOCL<CgmOCL>(prob);
+            // prob.Build<SymDiagSlaeBuilder>();
+            // // SolveHost<BicgStabHost>(prob);
+            // SolveOCL<BicgStabOCL>(prob);
+            // // SolveHost<CgmHost>(prob);
+            // SolveOCL<CgmOCL>(prob);
             
-            Trace.WriteLine("");
+            // Trace.WriteLine("");
             
             prob.Build<MsrSlaeBuilder>();
             // SolveHost<BicgStabHost>(prob);
@@ -261,6 +344,8 @@ class Course
             prob.Build<SymDiagSlaeBuilder>();
             // SolveOCL<CgmOCL>(prob);
         }
+        
+        Trace.WriteLine("");
     }
 
     static void TestConvergence<T>()
