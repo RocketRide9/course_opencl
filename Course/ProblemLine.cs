@@ -64,6 +64,7 @@ class ProblemLine {
         );
 
         _mesh.Refine(_refineParams);
+        this.buildType = buildType;
     }
     
     public void Build<T>()
@@ -76,7 +77,7 @@ class ProblemLine {
         Trace.WriteLine($"ProblemLine.Build total: {sw.ElapsedMilliseconds}");
     }
     
-    void MeshRefine(RefineParams refineParams)
+    public void MeshRefine(RefineParams refineParams)
     {
         _mesh.Refine(refineParams);
     }

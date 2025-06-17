@@ -1,4 +1,4 @@
-#define SPARKCL_COLLECT_TIME
+//#define SPARKCL_COLLECT_TIME
 
 #if USE_DOUBLE
 using Real = double;
@@ -17,14 +17,17 @@ using SlaeSolver;
 using SlaeBuilder;
 using Matrices;
 
+
 class Course
 {
+    const string SRC_DIR = "../../../";
     static void Main(string[] args)
     {
         Core.Init();
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var unixMs = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
-        Trace.Listeners.Add(new TextWriterTraceListener(new StreamWriter("timings_" + unixMs + "_.txt")));
+        Directory.CreateDirectory(SRC_DIR + "measurements");
+        Trace.Listeners.Add(new TextWriterTraceListener(new StreamWriter(SRC_DIR + "measurements/" + unixMs + ".txt")));
         Trace.AutoFlush = true;
 
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchMsrMul).Assembly).RunAll();
@@ -32,7 +35,7 @@ class Course
 
         // BuildImplsXMatrices();
         // MatricesXSolvers();
-        // Table1();
+        Table1();
         Table2();
 
         /*
@@ -45,51 +48,26 @@ class Course
         Debugger.Break();
         */
     }
-    
-    static void Table2()
-    {
-        const int REPEAT_COUNT = 3;
-        const int REFINE_COUNT = 2;
-        
-        var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
-        prob.buildType = GlobalMatrixImplType.HostParallel;
 
-        for (int r = 0; r < REFINE_COUNT; r++)
-        {
-            Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
-            Console.WriteLine($"n = {prob.Mesh.nodesCount}");
-            
-            for (int i = 0; i < REPEAT_COUNT; i++)
-            {
-                prob.Build<SymDiagSlaeBuilder>();
-                SolveHost<BicgStabHost>(prob);
-                SolveOCL<BicgStabOCL>(prob);
-                SolveHost<CgmHost>(prob);
-                SolveOCL<CgmOCL>(prob);
-
-                Trace.WriteLine("");
-
-                prob.Build<MsrSlaeBuilder>();
-                SolveHost<BicgStabHost>(prob);
-                SolveOCL<BicgStabOCL>(prob);
-
-                Trace.WriteLine("");
-            }
-            
-            prob.MeshDouble();
-        }
-    }
-    
     static void Table1()
     {
         const int REPEAT_COUNT = 3;
-        const int REFINE_COUNT = 7;
+        const int REFINE_COUNT = 6;
         var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
+        var prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
+        prob.MeshRefine(new()
+        {
+            XSplitCount = [64],
+            YSplitCount = [64],
+            XStretchRatio = [1],
+            YStretchRatio = [1],
+        });
+
+        Console.WriteLine("Table 1:");
 
         for (int r = 0; r < REFINE_COUNT; r++)
         {
+            Console.WriteLine($"n = {prob.Mesh.nodesCount}");
             Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
     
             prob.buildType = GlobalMatrixImplType.HostParallel;
@@ -127,10 +105,53 @@ class Course
         }
     }
     
+    static void Table2()
+    {
+        const int REPEAT_COUNT = 3;
+        const int REFINE_COUNT = 5;
+        
+        var task = new TaskRect4x5();
+        var prob = new ProblemLine(task, SRC_DIR + "InputRect4x5", GlobalMatrixImplType.HostParallel);
+        prob.MeshRefine(new()
+        {
+            XSplitCount = [64],
+            YSplitCount = [64],
+            XStretchRatio = [1],
+            YStretchRatio = [1],
+        });
+
+        Console.WriteLine("Table 2:");
+
+        for (int r = 0; r < REFINE_COUNT; r++)
+        {
+            Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
+            Console.WriteLine($"n = {prob.Mesh.nodesCount}");
+            
+            for (int i = 0; i < REPEAT_COUNT; i++)
+            {
+                prob.Build<SymDiagSlaeBuilder>();
+                SolveHost<BicgStabHost>(prob);
+                SolveOCL<BicgStabOCL>(prob);
+                SolveHost<CgmHost>(prob);
+                SolveOCL<CgmOCL>(prob);
+
+                Trace.WriteLine("");
+
+                prob.Build<MsrSlaeBuilder>();
+                SolveHost<BicgStabHost>(prob);
+                SolveOCL<BicgStabOCL>(prob);
+
+                Trace.WriteLine("");
+            }
+            
+            prob.MeshDouble();
+        }
+    }
+    
     static void MatricesXSolvers()
     {
         var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
+        var prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
         prob.buildType = GlobalMatrixImplType.OpenCLV2;
 
         Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
@@ -166,7 +187,7 @@ class Course
     where T2: ISlaeBuilder
     {
         var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
+        var prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
         prob.buildType = GlobalMatrixImplType.HostParallel;
 
         prob.Build<T1>();
@@ -239,7 +260,7 @@ class Course
         const int REPEAT_COUNT = 3;
         const int REFINE_COUNT = 6;
         var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
+        var prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
         
         
         Console.WriteLine("Classic Parallel:");
@@ -262,7 +283,7 @@ class Course
         }
         
         
-        prob = new ProblemLine(task, "../../../InputRect4x5");
+        prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
         Console.WriteLine("OpenCL V2:");
         for (int re = 0; re < REFINE_COUNT; re++)
         {
@@ -282,7 +303,7 @@ class Course
             }
         }
 
-        prob = new ProblemLine(task, "../../../InputRect4x5");
+        prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
         Console.WriteLine("OpenCL:");
         for (int re = 0; re < REFINE_COUNT; re++)
         {
@@ -307,7 +328,7 @@ class Course
     {
         const int REPEAT_COUNT = 5;
         var task = new TaskRect4x5();
-        var prob = new ProblemLine(task, "../../../InputRect4x5");
+        var prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
 
         Trace.WriteLine($"n = {prob.Mesh.nodesCount}");
         
@@ -413,14 +434,14 @@ class Course
             ProblemLine prob;
 
 #if true
-            prob = new ProblemLine(task, "../../../InputRect4x5");
+            prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
             prob.buildType = GlobalMatrixImplType.HostParallel;
             _TestBicgOclBatch(prob);
             Console.WriteLine();
 #endif
 
 #if true
-            prob = new ProblemLine(task, "../../../InputRect4x5");
+            prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
             prob.buildType = GlobalMatrixImplType.HostParallel;
             _TestBicgHostBatch(prob);
             Console.WriteLine();
@@ -434,13 +455,13 @@ class Course
         {
             ProblemLine prob;
 
-            prob = new ProblemLine(task, "../../../InputRect4x5");
+            prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
             prob.buildType = GlobalMatrixImplType.OpenCL;
             _TestBicgOclBatch(prob);
             Console.WriteLine();
 
 #if false
-            prob = new ProblemLine(task, "../../../InputRect4x5");
+            prob = new ProblemLine(task, SRC_DIR + "InputRect4x5");
             prob.buildType = GlobalMatrixImplType.OpenCL;
             _TestBicgHostBatch(prob);
             Console.WriteLine();
