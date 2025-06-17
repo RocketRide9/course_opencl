@@ -53,54 +53,41 @@ public class MsrMatrix : Matrix
         }
     }
 
-    // TODO: можно переписать на Array<> так как эта функция теперь здесь
     public unsafe void Mul(ReadOnlySpan<Real> vec, Span<Real> res)
     {
 #if HOST_PARALLEL
-        var partitioner = Partitioner.Create(0, Ia.Length);
-        fixed(Real* _p_mat = Elems)
-        fixed(Real* _p_di = Di)
-        fixed(int* _p_ia = Ia)
-        fixed(int* _p_ja = Ja)
+        var partitioner = Partitioner.Create(0, Ia.Length - 1);
         fixed(Real* _p_v = vec)
         fixed(Real* _p_res = res)
         {
-            var p_mat = _p_mat;
-            var p_di = _p_di;
-            var p_ia = _p_ia;
-            var p_ja = _p_ja;
             var p_v = _p_v;
             var p_res = _p_res;
             Parallel.ForEach(partitioner, (range, state) =>
             {
                 for (int i = range.Item1; i < range.Item2; i++)
                 {
-                    int start = p_ia[i];
-                    int stop = p_ia[i + 1];
-                    Real dot = p_di[i] * p_v[i];
+                    int start = Ia[i];
+                    int stop = Ia[i + 1];
+                    Real dot = Di[i] * p_v[i];
                     for (int a = start; a < stop; a++)
                     {
-                        dot += p_mat[a] * p_v[p_ja[a]];
+                        dot += Elems[a] * p_v[Ja[a]];
                     }
                     p_res[i] = dot;
                 }
             });
         }
 #else
-        fixed(Real* p_mat = Elems)
-        fixed(Real* p_di = Di)
-        fixed(int* p_ia = Ia)
-        fixed(int* p_ja = Ja)
         fixed(Real* p_v = vec)
         fixed(Real* p_res = res)
         for (int i = 0; i < Ia.Length - 1; i++)
         {
-            int start = p_ia[i];
-            int stop = p_ia[i + 1];
-            Real dot = p_di[i] * p_v[i];
+            int start = Ia[i];
+            int stop = Ia[i + 1];
+            Real dot = Di[i] * p_v[i];
             for (int a = start; a < stop; a++)
             {
-                dot += p_mat[a] * p_v[p_ja[a]];
+                dot += Elems[a] * p_v[Ja[a]];
             }
             p_res[i] = dot;
         }
