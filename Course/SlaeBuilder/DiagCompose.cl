@@ -1,4 +1,5 @@
 #define real double
+#pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
 
 #ifdef __MESA__
 #include "FEMShared.cl"
