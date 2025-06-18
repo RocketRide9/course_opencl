@@ -198,7 +198,12 @@ class Course
         var matrix2 = prob.matrix;
         var b2 = prob.b;
 
-        if (matrix1.FlatNonZero().SequenceEqual(matrix2.FlatNonZero()))
+        VerifySlaes(matrix1, b1, matrix2, b2);
+    }
+    
+    static void VerifySlaes(Types.Matrix m1, Real[] b1, Types.Matrix m2, Real[] b2)
+    {
+        if (m1.FlatNonZero().SequenceEqual(m2.FlatNonZero()))
         {
             if (b1.SequenceEqual(b2))
             {
@@ -210,8 +215,8 @@ class Course
             }
         } else {
             Console.WriteLine("Матрицы разные");
-            Console.WriteLine(string.Join(',', matrix1.FlatNonZero()));
-            Console.WriteLine(string.Join(',', matrix2.FlatNonZero()));
+            Console.WriteLine(string.Join(',', m1.FlatNonZero()));
+            Console.WriteLine(string.Join(',', m2.FlatNonZero()));
         }
     }
     
