@@ -39,7 +39,7 @@ class Course
         // BuildImplsXMatrices();
         // MatricesXSolvers();
         Table1();
-        Table2();
+        // Table2();
 
         /*
         Console.WriteLine("Waiting for debugger to attach");
