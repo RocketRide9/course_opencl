@@ -51,7 +51,7 @@ class Course
         Debugger.Break();
         */
     }
-
+#if SPARKCL_COLLECT_TIME
     static void OCLTraceTime()
     {
         var (ioTime, kernTime) = Core.MeasureTime();
@@ -60,6 +60,7 @@ class Course
         Trace.WriteLine($"OpenCL Tracing: {kernTime}ms + {ioTime}ms");
         Core.ResetTime();
     }
+#endif
     
     static void Table1()
     {
@@ -116,7 +117,7 @@ class Course
             }
             
             Trace.WriteLine("");
-#endif            
+#endif
             prob.buildType = GlobalMatrixImplType.OpenCLV2;
             for (int i = 0; i < REPEAT_COUNT; i++)
             { // Node OpenCL build
@@ -380,7 +381,7 @@ class Course
         Trace.WriteLine("");
 
 // эта реализация сборки нужна только для проверки правильности
-#if false 
+#if false
         prob.buildType = GlobalMatrixImplType.Host;
         for (int i = 0; i < REPEAT_COUNT; i++)
         { // Classic build
