@@ -186,10 +186,7 @@ class ProblemLine {
         Trace.WriteLine($"Matrix Host->Device: {sw.ElapsedMilliseconds}ms");
         
         sw.Restart();
-        
-        Trace.Indent();
         var (rr, iter) = solver.Solve(cm, b, x0);
-        Trace.Unindent();
         Trace.WriteLine($"Solver {typeof(T).FullName}: {sw.ElapsedMilliseconds}ms");
 
         return (x0, iter, rr);

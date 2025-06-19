@@ -1,4 +1,4 @@
-//#define SPARKCL_COLLECT_TIME
+#define SPARKCL_COLLECT_TIME
 
 #if USE_DOUBLE
 using Real = double;
@@ -23,12 +23,15 @@ class Course
     const string SRC_DIR = "../../../";
     static void Main(string[] args)
     {
-        Core.Init();
         Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var unixMs = new DateTimeOffset(DateTime.Now).ToUnixTimeMilliseconds();
         Directory.CreateDirectory(SRC_DIR + "measurements");
         Trace.Listeners.Add(new TextWriterTraceListener(new StreamWriter(SRC_DIR + "measurements/" + unixMs + ".txt")));
         Trace.AutoFlush = true;
+        
+        var sw = Stopwatch.StartNew();
+        Core.Init();
+        Trace.WriteLine($"SparkCL Init: {sw.ElapsedMilliseconds}ms");
 
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchMsrMul).Assembly).RunAll();
         // var summaries = BenchmarkSwitcher.FromAssembly(typeof(Benchmarks.BenchBicgStabPure).Assembly).RunAll();
@@ -49,6 +52,15 @@ class Course
         */
     }
 
+    static void OCLTraceTime()
+    {
+        var (ioTime, kernTime) = Core.MeasureTime();
+        ioTime /= (ulong)1e+6;
+        kernTime /= (ulong)1e+6;
+        Trace.WriteLine($"OpenCL Tracing: {kernTime}ms + {ioTime}ms");
+        Core.ResetTime();
+    }
+    
     static void Table1()
     {
         const int REPEAT_COUNT = 3;
@@ -81,21 +93,40 @@ class Course
     
             Trace.WriteLine("");
             
+#if true
             prob.buildType = GlobalMatrixImplType.OpenCL;
             for (int i = 0; i < REPEAT_COUNT; i++)
             { // Element OpenCL build
+#if SPARKCL_COLLECT_TIME
+                Core.ResetTime();
+#endif
                 prob.Build<MsrSlaeBuilder>();
-                prob.Build<DiagSlaeBuilder>();
+#if SPARKCL_COLLECT_TIME
+                OCLTraceTime();
+#endif
                 prob.Build<SymDiagSlaeBuilder>();
+#if SPARKCL_COLLECT_TIME
+                OCLTraceTime();
+#endif
+                prob.Build<DiagSlaeBuilder>();
+#if SPARKCL_COLLECT_TIME
+                OCLTraceTime();
+#endif
                 // SolveOCL<CgmOCL>(prob);
             }
             
             Trace.WriteLine("");
-            
+#endif            
             prob.buildType = GlobalMatrixImplType.OpenCLV2;
             for (int i = 0; i < REPEAT_COUNT; i++)
             { // Node OpenCL build
+#if SPARKCL_COLLECT_TIME
+                Core.ResetTime();
+#endif
                 prob.Build<MsrSlaeBuilder>();
+#if SPARKCL_COLLECT_TIME
+                OCLTraceTime();
+#endif
                 // SolveOCL<CgmOCL>(prob);
             }
             
@@ -223,12 +254,12 @@ class Course
     static void SolveOCL<T>(ProblemLine prob)
     where T: SparkAlgos.SlaeSolver.ISlaeSolver
     {
-        Trace.WriteLine("Setting up solver");
+        Trace.WriteLine("SolveOCL");
         Trace.Indent();
-        var sw = Stopwatch.StartNew();
 #if SPARKCL_COLLECT_TIME
         Core.ResetTime();
 #endif
+        var sw = Stopwatch.StartNew();
         var (ans, iters, rr) = prob.SolveOCL<T>();
         sw.Stop();
         var err = prob.Lebeg2Err(ans);
@@ -238,12 +269,12 @@ class Course
         kernTime /= (ulong)1e+6;
 #endif
         Console.WriteLine($"(err {err}) (iters {iters}) (discrep: {rr})");
+        Trace.Unindent();
         Trace.Write($"Solver total: {sw.ElapsedMilliseconds}мс");
 #if SPARKCL_COLLECT_TIME
         Trace.Write($": {kernTime}мс + {ioTime}мс");
 #endif
         Trace.WriteLine("");
-        Trace.Unindent();
     }
     
     static void SolveHost<T>(ProblemLine prob)
